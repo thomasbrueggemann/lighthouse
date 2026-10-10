@@ -1,10 +1,11 @@
 import * as THREE from 'three';
 import { Noise2D } from './noise.js';
+import { addLamp } from './lights.js';
 import { GLSL_NOISE } from './noise.js';
 import { Builder, GeoBuilder, ringWall, annularSector, boxGeo, cylGeo, lathe, scaleUV } from './geom.js';
 import {
   TAU, DEG, FLOORS, STAIRS, WINDOWS, FLOOR_H, R_IN, TOWER_TOP, CELLAR_Y, LANTERN_Y, LENS_Y, R_GLASS, R_GALLERY, GLASS_TOP,
-  WALL_SEGS, DOOR_ANGLE, SECRET_NICHE, LANTERN_DOOR_SIDE, DIRTY_PANES, CAVE, rOutAt, polar, faceIn,
+  WALL_SEGS, DOOR_ANGLE, SECRET_NICHE, LANTERN_DOOR_SIDE, DIRTY_PANES, CAVE, RED_FLOORS, rOutAt, polar, faceIn,
 } from './config.js';
 
 const NZ = new Noise2D(4242);
@@ -61,14 +62,15 @@ export function buildTower(ctx) {
 
   // ------------------------------------------------------------ walls
   for (let i = 0; i < FLOORS.length; i++) {
-    const y0 = FLOORS[i].y, y1 = i < 4 ? FLOORS[i + 1].y : TOWER_TOP;
+    const y0 = FLOORS[i].y, y1 = i < FLOORS.length - 1 ? FLOORS[i + 1].y : TOWER_TOP;
     const openings = WINDOWS[i].map(w => ({ s0: segOf(w.a, w.n), n: w.n, yb: y0 + w.yb, yt: y0 + w.yt, kind: 'window', w }));
     if (i === 0) openings.push({ s0: segOf(DOOR_ANGLE, 4), n: 4, yb: y0, yt: y0 + 2.25, kind: 'door' });
     if (i === SECRET_NICHE.floor) openings.push({ s0: segOf(SECRET_NICHE.a, SECRET_NICHE.n), n: SECRET_NICHE.n, yb: y0 + 0.4, yt: y0 + 2.1, kind: 'niche', depth: 0.7 });
-    const w = ringWall({ rIn: R_IN, rOutFn: rOutAt, y0, y1, segs: WALL_SEGS, openings });
-    if (w.inner) mesh(w.inner, M.plaster);
-    if (w.outer) mesh(w.outer, i === 3 ? M.stoneRed : M.stoneWhite);
-    if (w.reveal) mesh(w.reveal, M.plaster);
+    const w = ringWall({ rIn: R_IN, rOutFn: rOutAt, y0, y1, segs: WALL_SEGS, openings, innerTileH: 2.0, dadoH: 1.1 });
+    if (w.inner) mesh(w.inner, M.plasterFloor[i]);
+    if (w.dado) mesh(w.dado, M.dado);
+    if (w.outer) mesh(w.outer, RED_FLOORS.includes(i) ? M.stoneRed : M.stoneWhite);
+    if (w.reveal) mesh(w.reveal, M.plasterFloor[i]);
     // interior collision ring (door gap on ground floor)
     const gaps = i === 0 ? [[segOf(DOOR_ANGLE, 4) * segA, (segOf(DOOR_ANGLE, 4) + 4) * segA]] : [];
     col.addRing(0, 0, R_IN, y0 - 0.2, y1, WALL_SEGS, gaps);
@@ -78,7 +80,7 @@ export function buildTower(ctx) {
     for (const o of openings.filter(o => o.kind === 'window')) buildWindow(ctx, B, o, y0, i);
     // exterior string course
     const yc = y1;
-    if (i < 4) B.add(lathe([[rOutAt(yc), -0.18], [rOutAt(yc) + 0.1, -0.12], [rOutAt(yc) + 0.13, 0.02], [rOutAt(yc) + 0.08, 0.12], [rOutAt(yc), 0.16]], 96), M.granite, 0, yc, 0);
+    if (i < FLOORS.length - 1 && (i + 1) % 3 === 0) B.add(lathe([[rOutAt(yc), -0.18], [rOutAt(yc) + 0.1, -0.12], [rOutAt(yc) + 0.13, 0.02], [rOutAt(yc) + 0.08, 0.12], [rOutAt(yc), 0.16]], 96), M.granite, 0, yc, 0);
   }
   // exterior collision at ground level (with door gap)
   const dA0 = segOf(DOOR_ANGLE, 4) * segA, dA1 = dA0 + 4 * segA;
@@ -127,8 +129,8 @@ export function buildTower(ctx) {
     B.pop();
     const lg = new THREE.Mesh(cylGeo(0.09, 0.1, 0.28, 8), M.lampGlass); lg.position.set(lp.x, lp.y - 0.15, lp.z).add(polar(0.25, DOOR_ANGLE * DEG)); g.add(lg);
     const fl = new THREE.Mesh(new THREE.SphereGeometry(0.03, 6, 6), M.flame); fl.position.copy(lg.position); g.add(fl);
-    const L = new THREE.PointLight(0xffa858, 9, 14, 2); L.position.copy(lg.position).add(polar(0.15, DOOR_ANGLE * DEG)); g.add(L);
-    ctx.lights.push({ light: L, base: 9, flicker: 0.15 });
+    const lampPos = lg.position.clone().add(polar(0.15, DOOR_ANGLE * DEG));
+    addLamp(ctx, lampPos.x, lampPos.y, lampPos.z, { color: 0xffb468, base: 9, dist: 14, flicker: 0.15, room: 'out' });
   }
 
   // ------------------------------------------------------------ floors & ceilings
@@ -140,11 +142,16 @@ export function buildTower(ctx) {
       const s = stairInfo(i - 1);
       const m = mesh(slabGeo(R_IN + 0.04, { notch: { a0: s.holeA0, a1: s.holeA1, r0: s.r0 - 0.05 } }), M.planks);
       m.position.y = FLOORS[i].y - 0.3; col.addWalk(m, 'wood'); slabs.push(m);
+      // cream plaster between the beams, as in an old cottage: it takes the lamplight and gives it back to the room
+      const ceil = new THREE.Mesh(slabGeo(R_IN + 0.04, { notch: { a0: s.holeA0, a1: s.holeA1, r0: s.r0 - 0.05 } }, 0.02), M.ceiling);
+      ceil.position.y = FLOORS[i].y - 0.32; ceil.receiveShadow = true; g.add(ceil);
       buildBeams(B, M, FLOORS[i].y - 0.3, s.holeA0, s.holeA1, s.r0 - 0.08, 4.0);
     }
-    const s4 = stairInfo(4);
+    const s4 = stairInfo(FLOORS.length - 1);
     const lf = mesh(slabGeo(R_GLASS + 0.02, { sector: { a0: s4.holeA0, a1: s4.holeA1, r0: s4.r0 - 0.05, r1: s4.r1 + 0.05 } }, 0.3), M.ironBlack);
     lf.position.y = LANTERN_Y - 0.3; col.addWalk(lf, 'metal');
+    const ceilTop = new THREE.Mesh(slabGeo(R_IN + 0.04, { sector: { a0: s4.holeA0, a1: s4.holeA1, r0: s4.r0 - 0.05, r1: s4.r1 + 0.05 } }, 0.02), M.ceiling);
+    ceilTop.position.y = LANTERN_Y - 0.32; ceilTop.receiveShadow = true; g.add(ceilTop);
     buildBeams(B, M, LANTERN_Y - 0.3, s4.holeA0, s4.holeA1, s4.r0 - 0.08, s4.r1 + 0.08);
     // gallery deck
     const deck = mesh(annularSector(R_GLASS, R_GALLERY, 0, TAU, LANTERN_Y - 0.3, LANTERN_Y, 64, 1.5).geometry(), M.granite);
@@ -214,6 +221,11 @@ function buildWindow(ctx, B, o, y0, floorIdx) {
     ctx.tower.broken = { grp, casement, w, h, ac, p };
   }
   FB.build(grp, { name: 'window' });
+  if (!broken) {
+    // the room's lamplight shows from outside as a warm pane: the quad faces outward, so from within it is culled and you see through
+    const glow = new THREE.Mesh(new THREE.PlaneGeometry(w - 2 * f, h - 2 * f), M.windowGlow[(floorIdx * 5 + Math.round(ac * 7)) % 3]);
+    glow.rotation.y = Math.PI; glow.position.z = 0.045; grp.add(glow);
+  }
   // inner sill board
   const ps = polar(R_IN + 0.1, ac, yb + 0.025);
   B.box(2 * R_IN * Math.sin(o.n * segA / 2) + 0.12, 0.05, 0.4, M.wood, ps.x, ps.y, ps.z, 0, faceIn(ac), 0, 0.8);
@@ -230,9 +242,10 @@ function buildStair(ctx, B, i, g) {
     const b0 = s.a0 + k * s.d - 0.012, b1 = s.a0 + (k + 1) * s.d + (k === s.steps - 1 ? 3 * DEG : 0.004);
     annularSector(s.r0, s.r1, b0, b1, top - 0.2, top, 3, 0.8, gb);
   }
-  const sm = new THREE.Mesh(gb.geometry(), i === 4 ? M.ironBlack : M.wood);
+  const iron = i === STAIRS.length - 1;
+  const sm = new THREE.Mesh(gb.geometry(), iron ? M.ironBlack : M.wood);
   sm.castShadow = sm.receiveShadow = true; g.add(sm);
-  col.addWalk(sm, i === 4 ? 'metal' : 'wood');
+  col.addWalk(sm, iron ? 'metal' : 'wood');
   const freeOuter = s.r1 < R_IN - 0.2;
   // banister(s)
   const sides = freeOuter ? [s.r0 + 0.04, s.r1 - 0.04] : [s.r0 + 0.04];
@@ -255,7 +268,7 @@ function buildStair(ctx, B, i, g) {
   const ab = s.a0 + s.kb * s.d;
   col.addSeg(Math.cos(ab) * s.r0, Math.sin(ab) * s.r0, Math.cos(ab) * s.r1, Math.sin(ab) * s.r1, y0 - 1, y0 + 0.1);
   // railing round the hole on the floor above
-  const yU = i < 4 ? FLOORS[i + 1].y : LANTERN_Y;
+  const yU = i < FLOORS.length - 1 ? FLOORS[i + 1].y : LANTERN_Y;
   const rails = freeOuter ? [s.r0 - 0.04, s.r1 + 0.04] : [s.r0 - 0.04];
   for (const r of rails) {
     const n = 10, pts = [];
@@ -351,7 +364,6 @@ function buildLantern(ctx, B, g) {
   }
   const mantle = new THREE.Mesh(new THREE.SphereGeometry(0.11, 12, 10), M.lensGlow); mantle.visible = false; lens.add(mantle);
   const burner = new THREE.Mesh(cylGeo(0.05, 0.07, 0.6, 10), M.brass); burner.position.y = -0.45; lens.add(burner);
-  const lampLight = new THREE.PointLight(0xffe2b0, 0, 18, 2); lens.add(lampLight);
 
   // beams
   const beamMat = new THREE.ShaderMaterial({
@@ -375,7 +387,7 @@ function buildLantern(ctx, B, g) {
   }
   const flareMat = new THREE.SpriteMaterial({ map: ctx.T.glow, color: 0xfff0d0, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0 });
   const flare = new THREE.Sprite(flareMat); flare.position.set(0, LENS_Y, 0); flare.scale.set(8, 8, 1); flare.renderOrder = 6; g.add(flare);
-  T.lens = { group: lens, mantle, lampLight, beamMat, lensPanelMat, flare, flareMat };
+  T.lens = { group: lens, mantle, beamMat, lensPanelMat, flare, flareMat };
 }
 
 function buildCellar(ctx, B, g, mesh) {
@@ -493,8 +505,7 @@ function buildCellar(ctx, B, g, mesh) {
   });
   const pool = new THREE.Mesh(new THREE.CircleGeometry(POOL.r + 0.15, 48), poolMat);
   pool.rotation.x = -Math.PI / 2; pool.position.set(POOL.x, CAVE.y - 0.14, POOL.z); g.add(pool);
-  const poolLight = new THREE.PointLight(0x40e0e8, 9, 12, 2); poolLight.position.set(POOL.x, CAVE.y + 0.3, POOL.z); g.add(poolLight);
-  ctx.lights.push({ light: poolLight, base: 9, flicker: 0.05, zone: 'cave' });
+  addLamp(ctx, POOL.x, CAVE.y + 0.3, POOL.z, { color: 0x40e0e8, base: 9, dist: 12, flicker: 0.05, room: 'cave' });
   ctx.onUpdate((dt, t) => { poolMat.uniforms.uTime.value = t; });
   const gaps = [[80 * DEG, 100 * DEG]];
   col.addRing(CAVE.x, CAVE.z, CAVE.r * 0.8, CAVE.y - 2, CAVE.y + 4, 40, gaps);

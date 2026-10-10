@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { GLSL_SKY, skyU, updateSky } from './sky.js';
 import { waveHeight } from './ocean.js';
 import { shorePoints } from './island.js';
-import { TAU, SHED, R_OUT_BASE, R_OUT_TOP, TOWER_BASE, TOWER_TOP, clamp } from './config.js';
+import { TAU, SHED, R_OUT_BASE, R_OUT_TOP, TOWER_BASE, TOWER_TOP, LANTERN_Y, clamp } from './config.js';
 
 export class Weather {
   constructor(ctx) {
@@ -72,7 +72,7 @@ export class Weather {
           float hide = 0.0;
           float rOut = mix(${R_OUT_BASE.toFixed(2)}, ${R_OUT_TOP.toFixed(2)}, clamp((p.y - ${TOWER_BASE.toFixed(1)}) / ${(TOWER_TOP - TOWER_BASE).toFixed(1)}, 0., 1.));
           if (p.y < ${TOWER_TOP.toFixed(1)} && r < rOut + 0.1) hide = 1.0;
-          if (p.y < 35.3 && r < 3.5) hide = 1.0;
+          if (p.y < ${(LANTERN_Y + 5.8).toFixed(1)} && r < 3.5) hide = 1.0;
           if (abs(p.x - uShed.x) < uShed.z && abs(p.z - uShed.y) < uShed.w && p.y < 11.3) hide = 1.0;
           vec2 iuv = (p.xz - uIslandRect.xy) / uIslandRect.z;
           if (iuv.x > 0. && iuv.y > 0. && iuv.x < 1. && iuv.y < 1. && p.y < texture2D(uIsland, iuv).r + 0.05) hide = 1.0;

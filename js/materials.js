@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { FLOORS } from './config.js';
 
 const v2 = (x, y = x) => new THREE.Vector2(x, y);
 
@@ -63,6 +64,8 @@ export function createMaterials(T, renderer) {
   const M = {
     env,
     plaster: t3(T.plaster, { normalScale: v2(0.7) }),
+    ceiling: t3(T.plaster, { color: 0xe6d9bd, normalScale: v2(0.5) }),
+    dado: t3(T.dado, { normalScale: v2(0.9), envMap: env, envMapIntensity: 0.35 }),
     stoneWhite: t3(T.stoneWhite, { normalScale: v2(1.4), roughness: 0.85 }),
     stoneRed: t3(T.stoneRed, { normalScale: v2(1.4), roughness: 0.8 }),
     granite: t3(T.rock, { color: 0xb0aca4, normalScale: v2(1.2) }),
@@ -107,9 +110,12 @@ export function createMaterials(T, renderer) {
     radioFace: S({ map: T.radio, roughness: 0.5, emissive: 0x000000, emissiveMap: T.radio }),
     books: S({ vertexColors: true, roughness: 0.75 }),
     candle: S({ color: 0xeee6cf, roughness: 0.6 }),
-    glass: S({ color: 0x9fb4b8, roughness: 0.04, metalness: 0, transparent: true, opacity: 0.16, envMap: env, envMapIntensity: 1.5, depthWrite: false, side: THREE.DoubleSide }),
+    // window glass adds only reflections (additive, no diffuse): the storm stays visible through it, and a lamp in the room
+    // ghosts into the pane at a slant, as it does on a real night window
+    glass: S({ color: 0x000000, roughness: 0.03, metalness: 0, transparent: true, blending: THREE.AdditiveBlending, envMap: env, envMapIntensity: 3.0, depthWrite: false, side: THREE.DoubleSide }),
     glassBottle: S({ color: 0x3d6b4a, roughness: 0.08, transparent: true, opacity: 0.55, envMap: env, envMapIntensity: 1.2, depthWrite: false }),
     lampGlass: S({ color: 0xfff2d8, roughness: 0.05, transparent: true, opacity: 0.25, emissive: 0xffa040, emissiveIntensity: 0.4, depthWrite: false }),
+    windowGlow: [emissive(1.1, 0.66, 0.3), emissive(1.6, 1.0, 0.46), emissive(2.2, 1.4, 0.62)],
     flame: emissive(9, 4.2, 1.2),
     ember: emissive(4.5, 1.1, 0.15),
     lensGlow: emissive(14, 11, 7),
@@ -120,12 +126,29 @@ export function createMaterials(T, renderer) {
     silver: S({ color: 0xd8d8dc, metalness: 1, roughness: 0.2, envMap: env, envMapIntensity: 1.4 }),
     pearl: S({ color: 0xf2ece0, roughness: 0.15, envMap: env, envMapIntensity: 1.0 }),
     cork: S({ color: 0x9a7448, roughness: 0.9 }),
+    ragRug: S({ map: T.ragrug, roughness: 1 }),
+    ragRug2: S({ map: T.ragrug2, roughness: 1 }),
+    gingham: S({ map: T.gingham, roughness: 0.95, side: THREE.DoubleSide }),
+    tartan: S({ map: T.tartan, roughness: 0.95 }),
+    ticking: S({ map: T.ticking, roughness: 0.95 }),
+    terracotta: S({ color: 0xb5603a, roughness: 0.85 }),
+    shadeGreen: S({ color: 0x1f5a3a, roughness: 0.5, side: THREE.DoubleSide, emissive: 0x0a2a18, emissiveIntensity: 0.6 }),
+    lensSpare: S({ map: T.lens, color: 0xc8e0e0, roughness: 0.1, metalness: 0.1, transparent: true, opacity: 0.55, side: THREE.DoubleSide, envMap: env, envMapIntensity: 1.0, depthWrite: false }),
+    soil: S({ color: 0x2a1c12, roughness: 1 }),
+    foliage: S({ color: 0x3f6b34, roughness: 0.8, side: THREE.DoubleSide }),
+    flower: S({ color: 0xc42a2a, roughness: 0.7 }),
+    apple: S({ color: 0xb8362a, roughness: 0.45 }),
+    bread: S({ color: 0xb98a4a, roughness: 0.9 }),
     water: S({ color: 0x0c1418, roughness: 0.05, metalness: 0.2, envMap: env, envMapIntensity: 1.0, transparent: true, opacity: 0.85 }),
     puddle: S({ color: 0x0c0b09, roughness: 0.05, metalness: 0.1, envMap: env, envMapIntensity: 0.3, transparent: true, opacity: 0.6, depthWrite: false }),
     fur: S({ color: 0x8a5a2b, roughness: 1 }),
     furDark: S({ color: 0x2a2018, roughness: 1 }),
     rock: triplanar(S({ map: T.rock.map, roughness: 0.62, vertexColors: true, envMap: env, envMapIntensity: 0.25 }), 0.16, T.rock.normalMap),
   };
+  // each room is limewashed a different colour: butter-cream kitchen, blush parlour, sage bedroom, deep green study...
+  const TINTS = { store: 0xd9d4c4, kitchen: 0xffe2a8, parlour: 0xe9c3b4, bedroom: 0xcfdcc2, guest: 0xc3d0e0, study: 0x9fbfa6, library: 0xd9b68c, workshop: 0xd5d8d2, watch: 0xd2dadc };
+  const tint = (c) => { const m = M.plaster.clone(); m.color = new THREE.Color(c); return m; };
+  M.plasterFloor = FLOORS.map(f => tint(TINTS[f.id] ?? 0xe8e0d0));
   // the triplanar rock uses its own sampler coordinates
   M.rock.map.wrapS = M.rock.map.wrapT = THREE.RepeatWrapping;
   return M;

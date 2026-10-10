@@ -60,25 +60,45 @@ function gen(S, fn, normalStrength = 3) {
 // ---------------------------------------------------------------- generators
 
 function genPlaster() {
-  const band = 1.1 / 4.5;
-  return gen(512, (u, v, o) => {
-    const n = N.fbm(u * 8, v * 8, 5, 8, 8);
-    const st = N2.fbm(u * 3, v * 3, 4, 3, 3);
-    const fine = N.noise(u * 64, v * 64, 64, 64);
-    let r = 0.80, g = 0.75, b = 0.64;
-    const k = 0.93 + n * 0.12 + fine * 0.02;
-    const stain = sstep(0.15, 0.7, st) * 0.22;
-    r *= k * (1 - stain * 0.3); g *= k * (1 - stain * 0.4); b *= k * (1 - stain * 0.6);
-    let h = n * 0.5 + fine * 0.06, ro = 0.92;
-    if (v < band) {
-      const chip = N2.noise(u * 24, v * 24, 24, 24) + n * 0.6;
-      if (chip < 0.8) { const pk = 0.9 + n * 0.15; r = 0.11 * pk; g = 0.19 * pk; b = 0.18 * pk; ro = 0.5; h += 0.1; }
-      else h -= 0.04;
-    }
-    if (Math.abs(v - band) < 0.007) { r *= 0.45; g *= 0.4; b *= 0.35; h += 0.15; ro = 0.6; }
-    const grime = (0.72 + 0.28 * sstep(0.0, 0.07, v)) * (0.82 + 0.18 * sstep(1.0, 0.84, v));
-    r *= grime; g *= grime; b *= grime;
-    o.r = r; o.g = g; o.b = b; o.h = h; o.ro = ro;
+  // old lime-washed plaster, one tile = 2 m x 2 m: cloudy tone, water stains, hairline cracks, faint trowel sweeps
+  return gen(1024, (u, v, o) => {
+    const n = N.fbm(u * 5, v * 5, 5, 5, 5);
+    const n2 = N2.fbm(u * 18, v * 18, 3, 18, 18);
+    const st = N2.fbm(u * 2, v * 2, 4, 2, 2);
+    const fine = N.noise(u * 256, v * 256, 256, 256);
+    const sweep = N2.fbm(u * 2, v * 9, 3, 2, 9);
+    let r = 0.90, g = 0.86, b = 0.76;
+    const k = 0.93 + n * 0.12 + n2 * 0.04 + fine * 0.03 + sweep * 0.035;
+    const stain = sstep(0.2, 0.75, st);
+    r *= k * (1 - stain * 0.15); g *= k * (1 - stain * 0.21); b *= k * (1 - stain * 0.34);
+    const cr = N.ridged(u * 4 + 1.7, v * 4 + 5.1, 4, 4, 4);
+    const crack = sstep(0.945, 0.985, cr) * sstep(0.28, 0.5, N2.fbm(u * 2 + 5, v * 2 + 1, 3, 2, 2));
+    r *= 1 - crack * 0.5; g *= 1 - crack * 0.5; b *= 1 - crack * 0.45;
+    o.r = r; o.g = g; o.b = b;
+    o.h = n * 0.35 + n2 * 0.1 + fine * 0.05 + sweep * 0.08 - crack * 0.12;
+    o.ro = 0.9 - stain * 0.05 - crack * 0.1;
+  }, 2.2);
+}
+
+function genDado() {
+  // tongue-and-groove wainscot: 22 vertical boards per 2 m, varnished pine, scuffed toward the floor
+  const PL = 22, BIG = 1048576;
+  return gen(1024, (u, v, o) => {
+    const pi = Math.floor(u * PL), fu = u * PL - pi;
+    const tone = 0.8 + ((pi * 0.6180339) % 1) * 0.4;
+    const grain = N.fbm(fu * 4 + pi * 3.1, v * 3 + pi * 1.7, 4, BIG, 3);
+    const fine = N2.noise(fu * 40 + pi, v * 6, BIG, 6);
+    const ring = Math.sin((fu * 5 + grain * 2.2) * 6.2831853 * 1.3);
+    let k = tone * (0.86 + grain * 0.26 + ring * 0.035 + fine * 0.02);
+    const scuff = sstep(0.55, 0.0, v);
+    k *= 0.9 + 0.1 * sstep(0.0, 0.2, v) - scuff * 0.04;
+    let r = 0.50 * k, g = 0.31 * k, b = 0.17 * k;
+    const groove = Math.min(fu, 1 - fu);
+    const gv = sstep(0.07, 0.01, groove);
+    r *= 1 - gv * 0.78; g *= 1 - gv * 0.78; b *= 1 - gv * 0.74;
+    o.r = r; o.g = g; o.b = b;
+    o.h = 0.55 + grain * 0.06 - gv * 0.5 + (groove < 0.1 ? -0.04 : 0);
+    o.ro = 0.46 + grain * 0.1 + gv * 0.4;
   }, 2.5);
 }
 
@@ -350,8 +370,47 @@ function scribble(g, x, y, w, lines, lh, rnd, color = 'rgba(30,25,40,0.8)') {
   }
 }
 
+function ragRug(g, w, h, cols, seed) {
+  const rnd = mulberry32(seed), cx = w / 2, cy = h / 2;
+  g.fillStyle = '#cdbb98'; g.fillRect(0, 0, w, h);
+  let r = w / 2, ci = 0;
+  while (r > 6) {
+    const bw = 8 + rnd() * 20;
+    g.strokeStyle = cols[ci % cols.length]; g.lineWidth = bw + 1; g.beginPath(); g.arc(cx, cy, Math.max(1, r - bw / 2), 0, 6.2832); g.stroke();
+    r -= bw; ci += 1 + (rnd() < 0.25 ? 1 : 0);
+  }
+  g.fillStyle = cols[ci % cols.length]; g.beginPath(); g.arc(cx, cy, 8, 0, 6.2832); g.fill();
+  // the braid: short dashes lying along the rings
+  for (let i = 0; i < 14000; i++) {
+    const a = rnd() * 6.2832, rr = 6 + rnd() * (w / 2 - 6);
+    g.save(); g.translate(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr); g.rotate(a + Math.PI / 2);
+    g.fillStyle = rnd() < 0.5 ? `rgba(0,0,0,${0.05 + rnd() * 0.1})` : `rgba(255,255,255,${0.03 + rnd() * 0.07})`; g.fillRect(-3, -1, 6, 2); g.restore();
+  }
+}
+const tiled = (t) => { t.wrapS = t.wrapT = THREE.RepeatWrapping; return t; };
+
 export function makeCanvasTextures() {
   const T = {};
+  T.ragrug = canvasTex(512, 512, (g, w, h) => ragRug(g, w, h, ['#7a2a22', '#2f4a5a', '#d8c8a8', '#8a6a3a', '#3f5a3a', '#a85a3a'], 5));
+  T.ragrug2 = canvasTex(512, 512, (g, w, h) => ragRug(g, w, h, ['#2f4a5a', '#d8c8a8', '#6a3a2a', '#c8a050', '#2a3a2a'], 9));
+  T.gingham = tiled(canvasTex(256, 256, (g, w, h) => {
+    g.fillStyle = '#efe6d0'; g.fillRect(0, 0, w, h);
+    const c = w / 8;
+    for (let i = 0; i < 8; i += 2) { g.fillStyle = 'rgba(150,64,56,0.4)'; g.fillRect(i * c, 0, c, h); g.fillRect(0, i * c, w, c); }
+    const rnd = mulberry32(2); for (let i = 0; i < 5000; i++) { g.fillStyle = `rgba(0,0,0,${rnd() * 0.05})`; g.fillRect(rnd() * w, rnd() * h, 2, 1); }
+  }));
+  T.tartan = tiled(canvasTex(256, 256, (g, w, h) => {
+    g.fillStyle = '#26402e'; g.fillRect(0, 0, w, h);
+    g.globalAlpha = 0.62;
+    for (const [p, wd, col] of [[0.12, 0.05, '#a02a2a'], [0.3, 0.1, '#1c2a4a'], [0.5, 0.025, '#d8b040'], [0.72, 0.08, '#a02a2a'], [0.88, 0.03, '#d8c8a0']]) { g.fillStyle = col; g.fillRect(p * w, 0, wd * w, h); g.fillRect(0, p * h, w, wd * h); }
+    g.globalAlpha = 1;
+    const rnd = mulberry32(4); for (let i = 0; i < 6000; i++) { g.fillStyle = `rgba(0,0,0,${rnd() * 0.08})`; g.fillRect(rnd() * w, rnd() * h, 2, 1); }
+  }));
+  T.ticking = tiled(canvasTex(256, 256, (g, w, h) => {
+    g.fillStyle = '#e8e0cc'; g.fillRect(0, 0, w, h);
+    for (let x = 0; x < w; x += 32) { g.fillStyle = 'rgba(40,62,96,0.8)'; g.fillRect(x, 0, 14, h); }
+    const rnd = mulberry32(6); for (let i = 0; i < 5000; i++) { g.fillStyle = `rgba(0,0,0,${rnd() * 0.06})`; g.fillRect(rnd() * w, rnd() * h, 1, 2); }
+  }));
   T.salt = canvasTex(256, 256, (g, w, h) => {
     g.fillStyle = '#000'; g.fillRect(0, 0, w, h);
     const rnd = mulberry32(17);
@@ -480,7 +539,7 @@ export function makeCanvasTextures() {
 export async function generateTextures(progress) {
   const T = {};
   const jobs = [
-    ['plaster', genPlaster], ['stoneWhite', () => genStone(false)], ['stoneRed', () => genStone(true)],
+    ['plaster', genPlaster], ['dado', genDado], ['stoneWhite', () => genStone(false)], ['stoneRed', () => genStone(true)],
     ['planks', genPlanks], ['wood', genWood], ['paintWood', genPaintWood], ['rock', genRock],
     ['ironBlack', () => genMetal([0.075, 0.08, 0.075])], ['ironRed', () => genMetal([0.40, 0.05, 0.04], 0.38)],
     ['ironGreen', () => genMetal([0.10, 0.20, 0.15])],

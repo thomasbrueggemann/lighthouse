@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { GLSL_SKY, skyU } from './sky.js';
+import { LENS_Y } from './config.js';
 
 // [dirX, dirZ, amplitude, wavelength] — storm swell rolling in from the west
 const RAW = [
@@ -55,7 +56,7 @@ export class Ocean {
     const W2 = WAVES.map(w => new THREE.Vector4(w.w, w.q, w.p, 0));
     this.uniforms = THREE.UniformsUtils.merge([THREE.UniformsLib.fog, {
       uBeam: { value: 0 }, uBeamAngle: { value: 0 },
-      uLantern: { value: new THREE.Vector3(0, 31.35, 0) },
+      uLantern: { value: new THREE.Vector3(0, LENS_Y, 0) },
       uIsland: { value: null }, uIslandRect: { value: new THREE.Vector3() },
       uW: { value: W }, uW2: { value: W2 },
       uDeep: { value: new THREE.Color(0x02080b) }, uShallow: { value: new THREE.Color(0x0b2a2c) },

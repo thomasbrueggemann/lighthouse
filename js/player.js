@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { R_IN, CELLAR_Y, LANTERN_Y, R_GLASS, SHED, FLOORS, CAVE, clamp } from './config.js';
+import { R_IN, CELLAR_Y, LANTERN_Y, R_GLASS, SHED, FLOORS, CAVE, floorIndexAt, clamp } from './config.js';
 import { terrainHeight } from './island.js';
 import { cylGeo, Builder } from './geom.js';
 
@@ -46,21 +46,39 @@ export class Player {
     g.position.set(0.26, -0.36, -0.62); g.scale.setScalar(0.85);
     g.traverse(o => { o.castShadow = false; o.renderOrder = 2; });
     this.camera.add(g);
-    const L = new THREE.PointLight(0xffb060, 4.2, 16, 1.7);
+    // the lantern in your hand: a wide spot that follows your view and throws real shadows (one shadow pass rather than a
+    // cube's six), plus a small unshadowed fill so the space around you still glows
+    const L = new THREE.SpotLight(0xffb060, 4.8, 16, 1.0, 0.9, 1.7);
     L.position.set(0.24, -0.15, -0.45);
+    L.target.position.set(0.0, -0.3, -6);
+    this.camera.add(L.target);
     if (this.ctx.quality.shadows) {
-      // the lantern in your hand throws real shadows (re-rendered every frame: it moves with you)
       L.castShadow = true;
-      L.shadow.mapSize.set(512, 512);
-      L.shadow.bias = -0.003; L.shadow.normalBias = 0.03; L.shadow.radius = 2.2;
+      L.shadow.mapSize.set(1024, 1024);
+      L.shadow.bias = -0.0004; L.shadow.normalBias = 0.025; L.shadow.radius = 2.4;
       L.shadow.camera.near = 0.08;
     }
     this.camera.add(L);
-    this.lantern = { g, light: L, flame, on: true, t: 1 };
+    const fill = new THREE.PointLight(0xffb060, 1.1, 9, 2);
+    fill.position.copy(L.position);
+    this.camera.add(fill);
+    this.lantern = { g, light: L, fill, flame, on: true, t: 1 };
   }
   toggleLantern() {
     this.lantern.on = !this.lantern.on;
     this.ctx.audio.click();
+  }
+
+  // which room the player is in (drives indoor ambience, the lamp pool, audio)
+  updateZone() {
+    const p = this.pos;
+    const r = Math.hypot(p.x, p.z);
+    this.underground = p.y + 1.0 < terrainHeight(p.x, p.z) - 0.3 && r > R_IN + 0.2 || (p.y < 6.9 && r < R_IN + 0.3);
+    const inTower = r < R_IN + 0.15 && p.y > CELLAR_Y - 0.5 && p.y < LANTERN_Y - 0.1;
+    const inLantern = r < R_GLASS && p.y >= LANTERN_Y - 0.1 && p.y < LANTERN_Y + 3;
+    const inShed = Math.abs(p.x - SHED.x) < SHED.w / 2 - 0.2 && Math.abs(p.z - SHED.z) < SHED.d / 2 - 0.2 && p.y < 9;
+    this.indoor = inTower || inLantern || inShed || this.underground;
+    this.zone = this.underground ? (p.z < -6 ? 'cave' : 'cellar') : inTower ? FLOORS[floorIndexAt(p.y)].id : inLantern ? 'lantern' : inShed ? 'shed' : p.y > LANTERN_Y - 0.5 ? 'gallery' : 'outside';
   }
 
   teleport(p, yaw) { this.pos.copy(p); this.vel.set(0, 0, 0); if (yaw !== undefined) this.yaw = yaw; this.camY = p.y + EYE; }
@@ -71,6 +89,7 @@ export class Player {
     if (ctx.freeze) { // debug fly-cam: no physics
       this.camera.position.set(this.pos.x, this.pos.y + EYE, this.pos.z);
       this.camera.rotation.set(this.pitch, this.yaw, 0, 'YXZ');
+      this.updateZone();
       return;
     }
     let fx = 0, fz = 0;
@@ -117,14 +136,7 @@ export class Player {
       } else this.onGround = false;
       if (p.y < -12) { p.set(0, 7.2, 3); this.vel.set(0, 0, 0); }
     }
-    // zones
-    const r = Math.hypot(p.x, p.z);
-    this.underground = p.y + 1.0 < terrainHeight(p.x, p.z) - 0.3 && r > R_IN + 0.2 || (p.y < 6.9 && r < R_IN + 0.3);
-    const inTower = r < R_IN + 0.15 && p.y > CELLAR_Y - 0.5 && p.y < LANTERN_Y - 0.1;
-    const inLantern = r < R_GLASS && p.y >= LANTERN_Y - 0.1 && p.y < LANTERN_Y + 3;
-    const inShed = Math.abs(p.x - SHED.x) < SHED.w / 2 - 0.2 && Math.abs(p.z - SHED.z) < SHED.d / 2 - 0.2 && p.y < 9;
-    this.indoor = inTower || inLantern || inShed || this.underground;
-    this.zone = this.underground ? (p.z < -6 ? 'cave' : 'cellar') : inTower ? FLOORS[Math.max(0, Math.min(4, Math.floor((p.y - 7 + 0.5) / 4.5)))].id : inLantern ? 'lantern' : inShed ? 'shed' : p.y > LANTERN_Y - 0.5 ? 'gallery' : 'outside';
+    this.updateZone();
 
     // camera
     const hs = Math.hypot(this.vel.x, this.vel.z);
@@ -146,7 +158,7 @@ export class Player {
     L.g.position.set(0.26 + Math.sin(this.bob * 0.5) * 0.012 * bobA, -0.36 - (1 - L.t) * 0.4 + Math.abs(Math.cos(this.bob)) * 0.01 * bobA, -0.62);
     L.g.rotation.z = Math.sin(this.bob * 0.5) * 0.06 * bobA;
     const fl = 0.85 + Math.sin(ctx.time * 23) * 0.05 + Math.sin(ctx.time * 37.3) * 0.05 + (Math.random() - 0.5) * 0.06;
-    L.light.intensity = 4.2 * L.t * fl;
+    L.light.intensity = 4.8 * L.t * fl; L.fill.intensity = 1.1 * L.t * fl;
     L.light.shadow.autoUpdate = L.t > 0.05; // a lowered lantern costs nothing
     L.flame.visible = L.t > 0.5;
   }

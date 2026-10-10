@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { TAU } from './config.js';
+import { TAU, FLOOR_H } from './config.js';
 
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3();
 
@@ -55,8 +55,8 @@ export function annularSector(r0, r1, a0, a1, y0, y1, nseg = 4, ts = 1, gb = new
  * openings: [{ s0, n, yb, yt, kind: 'window'|'door'|'niche', depth }] in segment indices.
  * Returns { inner, outer, reveal } geometries (any may be null).
  */
-export function ringWall({ rIn, rOutFn, y0, y1, segs = 96, openings = [], innerTileW = 2.0, innerTileH = 4.5, outerTileW = 4.5, outerTileH = 4.5, noOuter = false }) {
-  const gi = new GeoBuilder(), go = new GeoBuilder(), gr = new GeoBuilder();
+export function ringWall({ rIn, rOutFn, y0, y1, segs = 96, openings = [], innerTileW = 2.0, innerTileH = 4.5, outerTileW = 4.5, outerTileH = 4.5, noOuter = false, dadoH = 0 }) {
+  const gi = new GeoBuilder(), gd = new GeoBuilder(), go = new GeoBuilder(), gr = new GeoBuilder();
   const segA = TAU / segs;
   const op = new Array(segs).fill(null);
   for (const o of openings) for (let k = 0; k < o.n; k++) op[((o.s0 + k) % segs + segs) % segs] = o;
@@ -64,13 +64,19 @@ export function ringWall({ rIn, rOutFn, y0, y1, segs = 96, openings = [], innerT
   const rMid = rOutFn((y0 + y1) / 2);
   const nOut = Math.max(1, Math.round(TAU * rMid / outerTileW));
   const uIn = (a) => a / TAU * nIn, uOut = (a) => a / TAU * nOut;
-  const vIn = (y) => (y - y0) / innerTileH, vOut = (y) => y / outerTileH;
+  // with a dado, the wall below it (wainscot) gets its own geometry/material; its tiles are as tall as they are wide
+  const yd = y0 + dadoH, tileD = TAU * rIn / nIn;
+  const vIn = (y) => (y - yd) / innerTileH, vDado = (y) => (y - y0) / tileD, vOut = (y) => y / outerTileH;
 
+  const innerPart = (g, vf, a0, a1, ya, yb) => g.quad([P(rIn, a0, ya), P(rIn, a1, ya), P(rIn, a1, yb), P(rIn, a0, yb)],
+    [radial(a0).negate(), radial(a1).negate(), radial(a1).negate(), radial(a0).negate()],
+    [[uIn(a0), vf(ya)], [uIn(a1), vf(ya)], [uIn(a1), vf(yb)], [uIn(a0), vf(yb)]]);
   const innerQuad = (a0, a1, ya, yb) => {
     if (yb - ya < 1e-4) return;
-    gi.quad([P(rIn, a0, ya), P(rIn, a1, ya), P(rIn, a1, yb), P(rIn, a0, yb)],
-      [radial(a0).negate(), radial(a1).negate(), radial(a1).negate(), radial(a0).negate()],
-      [[uIn(a0), vIn(ya)], [uIn(a1), vIn(ya)], [uIn(a1), vIn(yb)], [uIn(a0), vIn(yb)]]);
+    if (dadoH <= 0) return innerPart(gi, (y) => (y - y0) / innerTileH, a0, a1, ya, yb);
+    if (yb <= yd + 1e-4) return innerPart(gd, vDado, a0, a1, ya, yb);
+    if (ya >= yd - 1e-4) return innerPart(gi, vIn, a0, a1, ya, yb);
+    innerPart(gd, vDado, a0, a1, ya, yd); innerPart(gi, vIn, a0, a1, yd, yb);
   };
   const outerQuad = (a0, a1, ya, yb) => {
     if (noOuter || yb - ya < 1e-4) return;
@@ -111,6 +117,7 @@ export function ringWall({ rIn, rOutFn, y0, y1, segs = 96, openings = [], innerT
   }
   return {
     inner: gi.empty ? null : gi.geometry(),
+    dado: gd.empty ? null : gd.geometry(),
     outer: go.empty ? null : go.geometry(),
     reveal: gr.empty ? null : gr.geometry(),
   };
@@ -131,6 +138,43 @@ export function boxGeo(w, h, d, ts = 1) {
     const k = f * 4 + i;
     uv.setXY(k, uv.getX(k) * dims[f][0] / ts, uv.getY(k) * dims[f][1] / ts);
   }
+  return g;
+}
+
+// Box with 45-degree chamfered edges: 44 triangles, and the tiny bevels catch light the way real joinery does.
+// UVs are box-projected in world units (ts metres per tile), consistent with boxGeo.
+const chamferCache = new Map();
+export function chamferGeo(w, h, d, c = 0.012, ts = 0.8) {
+  const key = `${w}|${h}|${d}|${c}|${ts}`;
+  if (chamferCache.has(key)) return chamferCache.get(key);
+  c = Math.min(c, w / 2.01, h / 2.01, d / 2.01);
+  const hx = w / 2, hy = h / 2, hz = d / 2, gb = new GeoBuilder();
+  const V = (x, y, z) => new THREE.Vector3(x, y, z);
+  const uvOf = (p, n) => {
+    const ax = Math.abs(n.x), ay = Math.abs(n.y), az = Math.abs(n.z);
+    return ax >= ay && ax >= az ? [p.z / ts, p.y / ts] : ay >= az ? [p.x / ts, p.z / ts] : [p.x / ts, p.y / ts];
+  };
+  const emit = (pts, n) => { n = n.clone().normalize(); gb.quad(pts, n, pts.map(p => uvOf(p, n))); };
+  const sx = [-1, 1];
+  // six faces
+  for (const s of sx) {
+    emit([V(s * hx, -hy + c, -hz + c), V(s * hx, hy - c, -hz + c), V(s * hx, hy - c, hz - c), V(s * hx, -hy + c, hz - c)], V(s, 0, 0));
+    emit([V(-hx + c, s * hy, -hz + c), V(hx - c, s * hy, -hz + c), V(hx - c, s * hy, hz - c), V(-hx + c, s * hy, hz - c)], V(0, s, 0));
+    emit([V(-hx + c, -hy + c, s * hz), V(hx - c, -hy + c, s * hz), V(hx - c, hy - c, s * hz), V(-hx + c, hy - c, s * hz)], V(0, 0, s));
+  }
+  // twelve edge strips
+  for (const a of sx) for (const b of sx) {
+    emit([V(a * hx, b * (hy - c), -hz + c), V(a * hx, b * (hy - c), hz - c), V(a * (hx - c), b * hy, hz - c), V(a * (hx - c), b * hy, -hz + c)], V(a, b, 0));   // along z
+    emit([V(a * hx, -hy + c, b * (hz - c)), V(a * hx, hy - c, b * (hz - c)), V(a * (hx - c), hy - c, b * hz), V(a * (hx - c), -hy + c, b * hz)], V(a, 0, b));   // along y
+    emit([V(-hx + c, a * hy, b * (hz - c)), V(hx - c, a * hy, b * (hz - c)), V(hx - c, a * (hy - c), b * hz), V(-hx + c, a * (hy - c), b * hz)], V(0, a, b));   // along x
+  }
+  // eight corners (a quad with a repeated vertex = one triangle)
+  for (const a of sx) for (const b of sx) for (const e of sx) {
+    const p0 = V(a * hx, b * (hy - c), e * (hz - c)), p1 = V(a * (hx - c), b * hy, e * (hz - c)), p2 = V(a * (hx - c), b * (hy - c), e * hz);
+    emit([p0, p1, p2, p2], V(a, b, e));
+  }
+  const g = gb.geometry();
+  chamferCache.set(key, g);
   return g;
 }
 
@@ -177,13 +221,17 @@ export class Builder {
   cyl(rt, rb, h, mat, x = 0, y = 0, z = 0, seg = 16, rx = 0, ry = 0, rz = 0, ts = 0.8, open = false) {
     return this.add(cylGeo(rt, rb, h, seg, open, ts), mat, x, y, z, rx, ry, rz);
   }
+  // chamfered box: use for furniture bodies, tops, frames, anything whose edges the eye reads
+  cbox(w, h, d, mat, x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0, ts = 0.8, color = null, c = 0.012) {
+    return this.add(chamferGeo(w, h, d, c, ts), mat, x, y, z, rx, ry, rz, 1, 1, 1, color);
+  }
   // Large merges are split into spatial cells (10 m across, one per storey) so frustum culling works per cell:
   // the main pass and every shadow-map face then only draw what is actually near them.
   static bucket(list) {
     const cells = new Map(), c = new THREE.Vector3();
     for (const g of list) {
       g.computeBoundingBox(); g.boundingBox.getCenter(c);
-      const key = `${Math.floor((c.x + 5) / 10)}|${Math.floor((c.y - 6.8) / 4.5)}|${Math.floor((c.z + 5) / 10)}`;
+      const key = `${Math.floor((c.x + 5) / 10)}|${Math.floor((c.y - 6.8) / FLOOR_H)}|${Math.floor((c.z + 5) / 10)}`;
       if (!cells.has(key)) cells.set(key, []);
       cells.get(key).push(g);
     }
