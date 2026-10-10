@@ -50,6 +50,36 @@ function slabGeo(rOuter, { notch = null, sector = null, rect = null } = {}, thic
   return g;
 }
 
+// The dado rail runs round the room at its own height but must stop at anything that opens through the wall there: the
+// door, the windows and the niche. (It used to be one closed ring, which hung a handrail straight across the doorway.)
+// Each run of free wall gets its own arc, capped flush against the jambs.
+function dadoRail(B, mat, y, openings) {
+  const R = R_IN - 0.015, tube = 0.025;
+  const blocked = new Array(WALL_SEGS).fill(false);
+  for (const o of openings) {
+    if (o.yb > y + 0.03 || o.yt < y - 0.03) continue;
+    for (let k = 0; k < o.n; k++) blocked[((o.s0 + k) % WALL_SEGS + WALL_SEGS) % WALL_SEGS] = true;
+  }
+  const first = blocked.indexOf(true);
+  if (first < 0) { B.add(new THREE.TorusGeometry(R, tube, 4, WALL_SEGS), mat, 0, y, 0, Math.PI / 2); return; }
+  const arc = (i, m) => {
+    const a0 = i * segA, a1 = (i + m) * segA;
+    B.push(0, y, 0, -a0);
+    B.add(new THREE.TorusGeometry(R, tube, 4, m, m * segA), mat, 0, 0, 0, Math.PI / 2);
+    B.pop();
+    // the tube is open at both ends: close each with a diamond that faces the opening
+    B.add(new THREE.CircleGeometry(tube, 4), mat, R * Math.cos(a0), y, R * Math.sin(a0), 0, Math.atan2(Math.sin(a0), -Math.cos(a0)), 0);
+    B.add(new THREE.CircleGeometry(tube, 4), mat, R * Math.cos(a1), y, R * Math.sin(a1), 0, Math.atan2(-Math.sin(a1), Math.cos(a1)), 0);
+  };
+  for (let k = 1; k < WALL_SEGS;) {
+    if (blocked[(first + k) % WALL_SEGS]) { k++; continue; }
+    let m = 0;
+    while (k + m < WALL_SEGS && !blocked[(first + k + m) % WALL_SEGS]) m++;
+    arc((first + k) % WALL_SEGS, m);
+    k += m;
+  }
+}
+
 export function buildTower(ctx) {
   const { scene, M, col } = ctx;
   const g = new THREE.Group(); g.name = 'tower'; scene.add(g);
@@ -74,8 +104,8 @@ export function buildTower(ctx) {
     // interior collision ring (door gap on ground floor)
     const gaps = i === 0 ? [[segOf(DOOR_ANGLE, 4) * segA, (segOf(DOOR_ANGLE, 4) + 4) * segA]] : [];
     col.addRing(0, 0, R_IN, y0 - 0.2, y1, WALL_SEGS, gaps);
-    // dado rail
-    B.add(new THREE.TorusGeometry(R_IN - 0.015, 0.025, 4, 96), M.woodDark, 0, y0 + 1.1, 0, Math.PI / 2);
+    // dado rail, interrupted by the door, windows and niche
+    dadoRail(B, M.woodDark, y0 + 1.1, openings);
     // windows
     for (const o of openings.filter(o => o.kind === 'window')) buildWindow(ctx, B, o, y0, i);
     // exterior string course

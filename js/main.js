@@ -126,12 +126,12 @@ async function main() {
   const lensLamp = addLamp(ctx, 0, LENS_Y, 0, { color: 0xffe2b0, base: 0, dist: 18, manual: true, room: 'lantern' });
   ctx.refreshShadows = () => { if (quality.shadows) moon.shadow.needsUpdate = true; };
 
-  // post-processing: HDR scene target -> AO -> bloom -> composite (tone map, grade, lens drops, grain)
+  // post-processing: HDR scene target -> AO -> bloom -> composite (tone map, grade, grain)
   const post = new Post(renderer, scene, camera, quality);
   const governor = new Governor(ctx, post, renderer);
   ctx.governor = governor;
   ctx.onQualityDropped = () => { if (qualityName === 'high') store.set('quality', 'medium'); };
-  ctx.post = { wet: 0, fx: post };
+  ctx.post = post;
 
   // ---- interaction with the page
   let locked = false, started = false, ended = false;
@@ -278,9 +278,6 @@ async function main() {
     motes.update(t, outK);
 
     rainWet.value = 1 - weather.calm * 0.85;
-    // wet lens outside
-    ctx.post.wet = player.indoor ? Math.max(0, ctx.post.wet - dt * 0.35) : Math.min(1, Math.max(0, ctx.post.wet + dt * (0.2 * (1 - weather.calm) - 0.05 * weather.calm)));
-    post.u.uWet.value = Math.min(1.6, ctx.post.wet) * 0.55;
     post.u.uTime.value = t;
 
     // audio

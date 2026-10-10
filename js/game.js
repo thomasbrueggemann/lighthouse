@@ -196,7 +196,6 @@ export class Game {
         ctx.player.knock(0, -6.5);
         ctx.audio.crash(p.x, h, p.z, 1);
         ctx.weather.burst(p.x, h, p.z + 2, 40, 6, 0, 1);
-        ctx.post.wet = 1.6;
         this.toast('A wave breaks over the landing and nearly takes you!', 3);
       }
     }

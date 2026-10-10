@@ -5,7 +5,7 @@ import { FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
 //   scene -> HDR target (4x MSAA, with a depth texture)
 //   depth -> half-res ambient occlusion -> bilateral blur
 //   scene -> dual-filter bloom (progressive down/up sampling, no boxy halos)
-//   one composite pass: lens drops, chromatic fringe, AO, bloom, ACES tone map, grade, vignette, grain
+//   one composite pass: chromatic fringe, AO, bloom, ACES tone map, grade, vignette, grain
 
 const VERT = 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0., 1.); }';
 
@@ -111,28 +111,10 @@ void main(){
 const COMPOSITE_FRAG = /* glsl */`
 uniform sampler2D tScene, tBloom, tAO;
 uniform vec2 uRes;
-uniform float uTime, uWet, uExposure, uBloom, uBloomNorm, uAO, uCA, uVignette, uGrain, uContrast, uSat, uSplit, uFade, uSharp;
+uniform float uTime, uExposure, uBloom, uBloomNorm, uAO, uCA, uVignette, uGrain, uContrast, uSat, uSplit, uFade, uSharp;
 varying vec2 vUv;
 
 float h21(vec2 p){ p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
-// water drops sliding on the lens: returns a UV offset
-vec2 drops(vec2 uv, float t){
-  vec2 asp = vec2(uRes.x / uRes.y, 1.); vec2 off = vec2(0.);
-  for (int l = 0; l < 2; l++){
-    float sc = l == 0 ? 9. : 17.;
-    vec2 p = uv * asp * sc; p.y += t * 0.04 * float(l + 1);
-    vec2 id = floor(p), f = fract(p) - .5;
-    float r1 = h21(id + float(l) * 7.3), r2 = h21(id * 1.7 + 3.1);
-    vec2 c = (vec2(r1, r2) - .5) * .6;
-    float life = fract(t * (.12 + r1 * .2) + r2);
-    float rad = (.12 + .22 * h21(id + 11.)) * smoothstep(0., .08, life) * smoothstep(1., .55, life);
-    vec2 d = f - c; float dist = length(d * vec2(1., .85));
-    float m = smoothstep(rad, rad * .6, dist) * step(.45, h21(id + 5.));
-    off += d * m * -.9 / sc;
-  }
-  return off;
-}
-
 // same curve as three's ACESFilmicToneMapping
 vec3 aces(vec3 color){
   const mat3 inM = mat3(vec3(0.59719, 0.07600, 0.02840), vec3(0.35458, 0.90834, 0.13383), vec3(0.04823, 0.01566, 0.83777));
@@ -147,8 +129,6 @@ vec3 toSRGB(vec3 c){ return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.0
 
 void main(){
   vec2 uv = vUv;
-  vec2 o = uWet > 0.001 ? drops(uv, uTime) * uWet : vec2(0.);
-  uv += o;
   vec2 q = uv - 0.5;
   vec2 ca = q * dot(q, q) * uCA;
   vec3 col = vec3(texture2D(tScene, uv - ca).r, texture2D(tScene, uv).g, texture2D(tScene, uv + ca).b);
@@ -164,7 +144,6 @@ void main(){
   #ifdef USE_BLOOM
     col += texture2D(tBloom, uv).rgb * (uBloom * uBloomNorm);
   #endif
-  col += vec3(length(o) * 60. * 0.02);
   vec3 c = toSRGB(aces(col));
 
   // grade: gentle S-curve, cool shadows / warm highlights, slight desaturation
@@ -189,7 +168,7 @@ export class Post {
     this.ao = !!quality.ao; this.bloom = !!quality.bloom; this.samples = quality.name === 'low' ? 0 : 4;
     this.size = new THREE.Vector2();
     this.u = { // live-tunable look parameters
-      uTime: { value: 0 }, uWet: { value: 0 }, uRes: { value: new THREE.Vector2() }, uExposure: { value: 1.2 },
+      uTime: { value: 0 }, uRes: { value: new THREE.Vector2() }, uExposure: { value: 1.2 },
       uBloom: { value: 0.2 }, uBloomNorm: { value: 1 }, uAO: { value: 0.9 }, uCA: { value: 0.0045 }, uVignette: { value: 0.42 }, uGrain: { value: 0.024 },
       uContrast: { value: 0.35 }, uSat: { value: 1.0 }, uSplit: { value: 1.0 }, uFade: { value: 0 }, uSharp: { value: 0 },
     };
