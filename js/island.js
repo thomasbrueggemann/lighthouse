@@ -223,7 +223,7 @@ export function buildIsland(ctx) {
   // ---- jetty
   const JB = new Builder();
   for (let z = JETTY.z0; z < JETTY.z1; z += 0.27) {
-    JB.box(2.1 + (rnd() - 0.5) * 0.1, 0.07, 0.24, M.woodDark, (rnd() - 0.5) * 0.04, JETTY.y - 0.035, z + 0.12, 0, (rnd() - 0.5) * 0.02, (rnd() - 0.5) * 0.02, 1.0);
+    JB.box(2.1 + (rnd() - 0.5) * 0.1, 0.07, 0.24, M.jettyWood, (rnd() - 0.5) * 0.04, JETTY.y - 0.035, z + 0.12, 0, (rnd() - 0.5) * 0.02, (rnd() - 0.5) * 0.02, 1.0);
   }
   const jettyMeshes = JB.build(group, { name: 'jetty' });
   jettyMeshes.forEach(m => col.addWalk(m, 'wood'));

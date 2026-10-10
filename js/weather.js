@@ -42,32 +42,37 @@ export class Weather {
   }
 
   buildRain() {
+    // each drop is a camera-facing quad stretched along its fall: soft edges, a bright head and a tapering tail
     const N = 9000;
-    const pos = new Float32Array(N * 2 * 3), end = new Float32Array(N * 2);
+    const pos = new Float32Array(N * 4 * 3), end = new Float32Array(N * 4), side = new Float32Array(N * 4), idx = new Uint16Array(N * 6);
     for (let i = 0; i < N; i++) {
       const x = Math.random(), y = Math.random(), z = Math.random();
-      for (let k = 0; k < 2; k++) { const j = (i * 2 + k); pos[j * 3] = x; pos[j * 3 + 1] = y; pos[j * 3 + 2] = z; end[j] = k; }
+      for (let k = 0; k < 4; k++) { const j = i * 4 + k; pos[j * 3] = x; pos[j * 3 + 1] = y; pos[j * 3 + 2] = z; end[j] = k >> 1; side[j] = (k & 1) ? 1 : -1; }
+      const v = i * 4; idx.set([v, v + 1, v + 2, v + 1, v + 3, v + 2], i * 6);
     }
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     g.setAttribute('aEnd', new THREE.BufferAttribute(end, 1));
+    g.setAttribute('aSide', new THREE.BufferAttribute(side, 1));
+    g.setIndex(new THREE.BufferAttribute(idx, 1));
     this.rainU = {
       uTime: { value: 0 }, uCam: { value: new THREE.Vector3() }, uBox: { value: new THREE.Vector3(44, 26, 44) }, uWind: { value: new THREE.Vector2(9, 3) },
       uIsland: { value: this.ctx.island.tex }, uIslandRect: { value: this.ctx.island.rect }, uFlash: { value: 0 }, uAmount: { value: 1 }, uBeam: { value: 0 },
       uShed: { value: new THREE.Vector4(SHED.x, SHED.z, SHED.w / 2 + 0.4, SHED.d / 2 + 0.4) },
     };
     const mat = new THREE.ShaderMaterial({
-      transparent: true, depthWrite: false, uniforms: this.rainU,
+      transparent: true, depthWrite: false, uniforms: this.rainU, side: THREE.DoubleSide,
       vertexShader: `
-        attribute float aEnd; uniform float uTime, uAmount; uniform vec3 uCam, uBox, uIslandRect; uniform vec2 uWind; uniform sampler2D uIsland; uniform vec4 uShed;
-        varying float vA; varying float vNear;
+        attribute float aEnd; attribute float aSide; uniform float uTime, uAmount; uniform vec3 uCam, uBox, uIslandRect; uniform vec2 uWind; uniform sampler2D uIsland; uniform vec4 uShed;
+        varying float vA; varying float vNear; varying float vAlong; varying float vS;
         void main(){
           float sp = 0.85 + 0.3 * fract(position.x * 91.7 + position.z * 13.3);
           vec3 vel = vec3(uWind.x, -17.0, uWind.y) * sp;
           vec3 p = position * uBox + vel * uTime;
           p = mod(p - uCam + uBox * 0.5, uBox) + uCam - uBox * 0.5;
           vec3 dir = normalize(vel);
-          p -= dir * aEnd * (0.22 + 0.2 * sp);
+          float len = 0.3 + 0.32 * sp;
+          vec3 tail = p - dir * len;
           float r = length(p.xz);
           float hide = 0.0;
           float rOut = mix(${R_OUT_BASE.toFixed(2)}, ${R_OUT_TOP.toFixed(2)}, clamp((p.y - ${TOWER_BASE.toFixed(1)}) / ${(TOWER_TOP - TOWER_BASE).toFixed(1)}, 0., 1.));
@@ -80,13 +85,23 @@ export class Weather {
           float d = length(p - uCam);
           vNear = exp(-d * 0.22);
           vA = (1.0 - hide) * (1.0 - smoothstep(12., 22., d));
-          gl_Position = projectionMatrix * viewMatrix * vec4(p, 1.0);
+          // widen the quad perpendicular to the streak, in view space, so it always faces the camera and never thins below a pixel
+          vec4 mvh = viewMatrix * vec4(p, 1.0), mvt = viewMatrix * vec4(tail, 1.0);
+          vec3 axis = normalize(mvt.xyz - mvh.xyz);
+          vec3 sideV = normalize(cross(axis, normalize(mvh.xyz)));
+          float w = max(0.010, d * 0.0011);
+          vec4 mv = mix(mvh, mvt, aEnd);
+          mv.xyz += sideV * aSide * w * 0.5;
+          vAlong = aEnd; vS = aSide;
+          gl_Position = projectionMatrix * mv;
         }`,
-      fragmentShader: `uniform float uFlash, uBeam; varying float vA; varying float vNear;
-        void main(){ if (vA < 0.01) discard; vec3 c = vec3(0.55,0.6,0.66) * (0.10 + uFlash * 3.0 + uBeam * 0.15) + vec3(1.0,0.75,0.45) * vNear * 0.45;
-          gl_FragColor = vec4(c, vA * (0.13 + vNear * 0.2)); }`,
+      fragmentShader: `uniform float uFlash, uBeam; varying float vA; varying float vNear; varying float vAlong; varying float vS;
+        void main(){ if (vA < 0.01) discard;
+          float soft = 1.0 - vS * vS, taper = 1.0 - vAlong;
+          vec3 c = vec3(0.55,0.6,0.66) * (0.12 + uFlash * 3.0 + uBeam * 0.18) + vec3(1.0,0.75,0.45) * vNear * 0.26;
+          gl_FragColor = vec4(c, vA * (0.13 + vNear * 0.17) * soft * taper); }`,
     });
-    this.rain = new THREE.LineSegments(g, mat);
+    this.rain = new THREE.Mesh(g, mat);
     this.rain.frustumCulled = false; this.rain.renderOrder = 8;
     this.ctx.scene.add(this.rain);
   }

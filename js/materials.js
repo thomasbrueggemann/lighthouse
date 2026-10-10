@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { FLOORS } from './config.js';
+import { GLSL_PROBE, skyU } from './sky.js';
 
 const v2 = (x, y = x) => new THREE.Vector2(x, y);
 
@@ -52,6 +53,65 @@ function triplanar(mat, scale = 0.16, nrm = null) {
       .replace('#include <roughnessmap_fragment>', `
         float roughnessFactor = roughness * mix(0.62, 0.2, wet) / 0.62;`);
   };
+  return mat;
+}
+
+// ---- rain-soaked surfaces. One shared uniform (the storm eases off toward dawn); only fragments outside the tower get wet.
+// Wet stone is darker and glossier, streaked down its height, and mirrors the storm sky (so lightning flashes in it);
+// on the island's flat ground (WET_PUDDLES) it also pools into puddles that ripple with raindrops.
+export const rainWet = { value: 1 };
+const WET_FUNCS = /* glsl */`
+vec2 rainRipples(vec2 p, float t){
+  vec2 acc = vec2(0.);
+  for (int l = 0; l < 2; l++){
+    float sc = l == 0 ? 2.2 : 3.7;
+    vec2 q = p * sc + float(l) * 17.3, id = floor(q), f = fract(q) - 0.5;
+    float h = hash12(id + float(l) * 7.1);
+    float life = fract(t * (0.55 + 0.5 * h) + h * 5.0);
+    vec2 c = (vec2(hash12(id * 1.7), hash12(id * 2.9)) - 0.5) * 0.5;
+    vec2 d = f - c; float r = length(d);
+    float ring = sin((r - life * 0.45) * 38.0) * smoothstep(0.45, 0.0, r) * smoothstep(life * 0.45 + 0.1, life * 0.45 - 0.05, r) * (1.0 - life);
+    acc += normalize(d + 1e-4) * ring * 0.35;
+  }
+  return acc;
+}`;
+function wetten(mat) {
+  const prev = mat.onBeforeCompile;
+  mat.onBeforeCompile = function (sh, renderer) {
+    if (prev) prev.call(this, sh, renderer);
+    sh.uniforms.uRainWet = rainWet; Object.assign(sh.uniforms, skyU);
+    if (!sh.vertexShader.includes('varying vec3 vWP;')) {
+      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vWP;').replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvWP = (modelMatrix * vec4(transformed, 1.)).xyz;');
+      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vWP;');
+    }
+    const geoUp = sh.fragmentShader.includes('varying vec3 vWN;') ? 'vWN.y' : 'wN.y';   // the island supplies a geometric normal
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', `#include <common>\n${GLSL_PROBE}\nuniform float uRainWet;\n${WET_FUNCS}`)
+      .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+        float outdoors = smoothstep(4.0, 4.8, length(vWP.xz));
+        vec3 wN = inverseTransformDirection(normal, viewMatrix);
+        float rainK = uRainWet * outdoors * (0.55 + 0.45 * vnoise(vec2((vWP.x + vWP.z) * 2.2, vWP.y * 0.35)));
+        float puddle = 0.;
+        #ifdef WET_PUDDLES
+          puddle = uRainWet * outdoors * smoothstep(0.56, 0.7, vnoise(vWP.xz * 0.42 + 4.0) * 0.7 + vnoise(vWP.xz * 1.3) * 0.3) * smoothstep(0.9, 0.98, ${geoUp});
+          if (puddle > 0.0) {
+            vec2 rp = rainRipples(vWP.xz, uTime);
+            normal = normalize((viewMatrix * vec4(normalize(vec3(rp.x, 1.0, rp.y)), 0.0)).xyz);
+            diffuseColor.rgb *= mix(1.0, 0.4, puddle);
+            roughnessFactor = mix(roughnessFactor, 0.03, puddle);
+          }
+        #endif
+        diffuseColor.rgb *= mix(1.0, 0.7, rainK);
+        roughnessFactor = mix(roughnessFactor, roughnessFactor * 0.72, rainK);`)
+      .replace('#include <opaque_fragment>', `{
+          vec3 Vv = normalize(vViewPosition);
+          vec3 Rw = inverseTransformDirection(reflect(-Vv, normal), viewMatrix);
+          float fr = 0.04 + 0.96 * pow(1.0 - clamp(dot(normal, Vv), 0.0, 1.0), 5.0);
+          outgoingLight += skyProbe(Rw) * fr * (rainK * 0.4 + puddle * 1.1) * 1.3;
+        }
+        #include <opaque_fragment>`);
+  };
+  mat.customProgramCacheKey = () => 'wet' + (mat.defines?.WET_PUDDLES !== undefined ? 'P' : '') + (prev ? 'T' : '');
   return mat;
 }
 
@@ -149,6 +209,9 @@ export function createMaterials(T, renderer) {
   const TINTS = { store: 0xd9d4c4, kitchen: 0xffe2a8, parlour: 0xe9c3b4, bedroom: 0xcfdcc2, guest: 0xc3d0e0, study: 0x9fbfa6, library: 0xd9b68c, workshop: 0xd5d8d2, watch: 0xd2dadc };
   const tint = (c) => { const m = M.plaster.clone(); m.color = new THREE.Color(c); return m; };
   M.plasterFloor = FLOORS.map(f => tint(TINTS[f.id] ?? 0xe8e0d0));
+  M.rock.defines.WET_PUDDLES = '';   // add to the existing defines: MeshStandardMaterial needs its STANDARD flag
+  for (const k of ['rock', 'stoneWhite', 'stoneRed', 'granite', 'graniteDark', 'slate']) wetten(M[k]);
+  M.jettyWood = wetten(M.woodDark.clone());
   // the triplanar rock uses its own sampler coordinates
   M.rock.map.wrapS = M.rock.map.wrapT = THREE.RepeatWrapping;
   return M;

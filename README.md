@@ -37,7 +37,7 @@ All paths are relative, so it works from a sub-path. The `.nojekyll` file stops 
 | Space | jump |
 | Esc | pause |
 
-The menu has a quality setting. **High** turns on real shadows (the moon, lightning through the windows, the lamps nearest you and the lantern in your hand), screen-space ambient occlusion and bloom. **Medium** keeps bloom only, **Low** is for weaker GPUs. Keyboard and mouse are required.
+The menu has a quality setting. **High** turns on real shadows (the moon, lightning through the windows, the lamps nearest you and the lantern in your hand), screen-space ambient occlusion and bloom. **Medium** keeps bloom only, **Low** is for weaker GPUs. Keyboard and mouse are required. If the frame rate stays low on High, the game turns effects down one at a time (resolution scale, occlusion, dynamic shadows, MSAA) and remembers the choice.
 
 ## The tower
 

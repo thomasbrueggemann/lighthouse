@@ -61,7 +61,7 @@ export class Ocean {
       uW: { value: W }, uW2: { value: W2 },
       uDeep: { value: new THREE.Color(0x02080b) }, uShallow: { value: new THREE.Color(0x0b2a2c) },
       uFoam: { value: new THREE.Color(0xc8d2d6) }, uSkyLow: { value: new THREE.Color(0x0b0f14) }, uSkyHigh: { value: new THREE.Color(0x151b22) },
-      uAmbient: { value: 1 },
+      uAmbient: { value: 1 }, uGlitter: { value: 3.5 }, tWaterN: { value: ctx.T.waterN },
     }]);
     Object.assign(this.uniforms, skyU); // uTime, uFlash, moon & sky state are shared with the dome
     this.uniforms.uIsland.value = ctx.island.tex;
@@ -93,9 +93,9 @@ export class Ocean {
         #include <common>
         #include <fog_pars_fragment>
         ${GLSL_SKY}
-        uniform float uBeam, uBeamAngle, uAmbient;
+        uniform float uBeam, uBeamAngle, uAmbient, uGlitter;
         uniform vec3 uLantern, uIslandRect, uDeep, uShallow, uFoam, uSkyLow, uSkyHigh;
-        uniform sampler2D uIsland;
+        uniform sampler2D uIsland, tWaterN;
         varying vec3 vW; varying vec3 vN; varying float vJ; varying float vH;
         float islandH(vec2 xz){ vec2 uv = (xz - uIslandRect.xy) / uIslandRect.z;
           if (uv.x < 0. || uv.y < 0. || uv.x > 1. || uv.y > 1.) return -30.; return texture2D(uIsland, uv).r; }
@@ -103,15 +103,13 @@ export class Ocean {
           float rh = islandH(vW.xz);
           if (rh > 3.2) discard;
           vec3 N = normalize(vN);
-          // fine chop
-          vec2 q = vW.xz;
-          vec2 dn = vec2(0.);
-          dn += vec2(0.8, 0.5) * cos(dot(q, vec2(3.3, 2.1)) - uTime * 5.1) * 0.10;
-          dn += vec2(-0.4, 0.9) * cos(dot(q, vec2(-2.0, 4.6)) - uTime * 6.0) * 0.08;
-          dn += vec2(0.9, -0.3) * cos(dot(q, vec2(6.1, -2.2)) - uTime * 7.7) * 0.06;
-          dn += vec2(0.2, 1.0) * cos(dot(q, vec2(1.5, 8.0)) - uTime * 8.9) * 0.05;
+          // chop: three scrolling scales of a tileable normal map, flattened with distance so the far sea never shimmers
           float dist = length(cameraPosition - vW);
-          dn *= 1.0 - smoothstep(40., 160., dist);
+          vec2 q = vW.xz;
+          vec2 dn = (texture2D(tWaterN, q * 0.21 + vec2(uTime * 0.030, uTime * 0.017)).xy * 2. - 1.) * 0.55
+                  + (texture2D(tWaterN, q * 0.63 + vec2(-uTime * 0.045, uTime * 0.028)).xy * 2. - 1.) * 0.42
+                  + (texture2D(tWaterN, q * 1.9 + vec2(uTime * 0.06, uTime * 0.05)).xy * 2. - 1.) * 0.3;
+          dn *= 1.0 - smoothstep(70., 260., dist);
           N = normalize(N + vec3(dn.x, 0., dn.y));
           vec3 V = normalize(cameraPosition - vW);
           float NdV = max(dot(N, V), 0.);
@@ -120,10 +118,25 @@ export class Ocean {
           float amb = uAmbient + uFlash * 7.0;
           vec3 sky = stormSky(R, 0.0);
           float depthT = clamp(vH * 0.3 + 0.45, 0., 1.);
-          vec3 water = mix(uDeep, uShallow, depthT) * (0.7 + uFlash * 5.0);
+          vec3 Lm = normalize(uMoonDir);
+          float moonK = 0.2 + 0.8 * uMoonVis;
+          // the sea body: deep blue-green, brighter where the moon rakes the swell, and glowing through thin crests
+          float lit = 0.8 + moonK * 0.9 + max(dot(N, Lm), 0.) * moonK * 0.7;
+          vec3 water = mix(uDeep, uShallow, depthT) * (lit + uFlash * 5.0);
+          float sss = pow(max(dot(V, -Lm), 0.), 3.) * smoothstep(0.25, 1.3, vH) * moonK;
+          water += vec3(0.02, 0.11, 0.1) * sss * 1.6;
           float near = exp(-max(-rh, 0.) * 0.3) * step(-29., rh);
           water = mix(water, uShallow * 1.8 * amb, near * 0.45);
           vec3 col = mix(water, sky, fres);
+          // the moon's glitter path: GGX highlight off the chop (sharp sparkle) plus a broad sheen along the same line
+          vec3 Hm = normalize(Lm + V);
+          float NdH = max(dot(N, Hm), 0.);
+          const float a2 = 0.00045;
+          float dd = NdH * NdH * (a2 - 1.) + 1.;
+          float D = a2 / (PI * dd * dd);
+          float fm = 0.04 + 0.96 * pow(1. - max(dot(V, Hm), 0.), 5.);
+          float horizon = smoothstep(0.0, 0.12, Lm.y) * smoothstep(0.0, 0.03, V.y);
+          col += vec3(0.60, 0.72, 1.0) * (D * fm * 0.012 + pow(NdH, 36.) * 0.05 * (0.3 + 0.7 * fm)) * moonK * horizon * uGlitter * (1.0 - smoothstep(120., 420., dist));
           // lighthouse beam sweeping the sea
           vec3 toF = vW - uLantern;
           float hd = length(toF.xz);
@@ -147,7 +160,7 @@ export class Ocean {
           foamAmt *= smoothstep(0.3, 0.75, fn2 * 0.75 + foamAmt * 0.45);
           foamAmt += smoothstep(0.3, 0.9, fn) * 0.06;
           foamAmt = clamp(foamAmt, 0., 1.);
-          vec3 foamCol = uFoam * (0.16 * uAmbient + uFlash * 4.0) + vec3(1., .93, .75) * beam * 0.5 * 30. / (hd * 0.12 + 6.);
+          vec3 foamCol = uFoam * (0.2 * uAmbient + moonK * 0.34 + uFlash * 4.0) * vec3(0.84, 0.92, 1.0) + vec3(1., .93, .75) * beam * 0.5 * 30. / (hd * 0.12 + 6.);
           col = mix(col, foamCol, foamAmt);
           gl_FragColor = vec4(col, 1.);
           #include <tonemapping_fragment>

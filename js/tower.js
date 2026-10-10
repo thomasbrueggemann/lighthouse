@@ -122,11 +122,15 @@ export function buildTower(ctx) {
     const thr = mesh(annularSector(R_IN - 0.1, 5.75, dA0 - 0.01, dA1 + 0.01, 6.9, 7.02, 4, 1.2).geometry(), M.granite); col.addWalk(thr, 'stone');
     // exterior lamp above the door
     const lp = polar(5.75, DOOR_ANGLE * DEG, 9.55);
-    B.push(lp.x, lp.y, lp.z, faceIn(DOOR_ANGLE * DEG) + Math.PI);
-    B.box(0.06, 0.06, 0.35, M.ironBlack, 0, 0.12, 0.05);
-    B.cyl(0.11, 0.08, 0.06, M.ironBlack, 0, 0.0, 0.25, 8);
-    B.cyl(0.13, 0.05, 0.12, M.ironBlack, 0, -0.32, 0.25, 8);
-    B.pop();
+    { // the lamp's own ironwork does not cast shadows: the light sits inside it
+      const LB = new Builder();
+      LB.push(lp.x, lp.y, lp.z, faceIn(DOOR_ANGLE * DEG) + Math.PI);
+      LB.box(0.06, 0.06, 0.35, M.ironBlack, 0, 0.12, 0.05);
+      LB.cyl(0.11, 0.08, 0.06, M.ironBlack, 0, 0.0, 0.25, 8);
+      LB.cyl(0.13, 0.05, 0.12, M.ironBlack, 0, -0.32, 0.25, 8);
+      LB.pop();
+      LB.build(g, { shadows: false, name: 'door-lamp' });
+    }
     const lg = new THREE.Mesh(cylGeo(0.09, 0.1, 0.28, 8), M.lampGlass); lg.position.set(lp.x, lp.y - 0.15, lp.z).add(polar(0.25, DOOR_ANGLE * DEG)); g.add(lg);
     const fl = new THREE.Mesh(new THREE.SphereGeometry(0.03, 6, 6), M.flame); fl.position.copy(lg.position); g.add(fl);
     const lampPos = lg.position.clone().add(polar(0.15, DOOR_ANGLE * DEG));

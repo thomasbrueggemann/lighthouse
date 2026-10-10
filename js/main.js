@@ -10,6 +10,9 @@ import { Weather } from './weather.js';
 import { MOON_DIR } from './sky.js';
 import { Post } from './post.js';
 import { LightRig, addLamp } from './lights.js';
+import { Governor } from './perf.js';
+import { Motes } from './motes.js';
+import { rainWet } from './materials.js';
 import { Player } from './player.js';
 import { Interaction } from './interact.js';
 import { Game, Ship, TREASURES } from './game.js';
@@ -67,13 +70,15 @@ async function main() {
   // debug helper: skerry.view(x, y, z, yaw, pitch) parks a frozen camera
   ctx.view = (x, y, z, yaw, pitch = 0) => { ctx.freeze = true; ctx.player.pos.set(x, y, z); ctx.player.yaw = yaw; ctx.player.pitch = pitch; };
 
+  const marks = ctx.loadMarks = { start: Math.round(performance.now()) };
+  const mark = (name) => { marks[name] = Math.round(performance.now()); };
   setLoad(0.02, 'Quarrying granite…');
   const T = await generateTextures((p, name) => setLoad(0.05 + p * 0.65, {
     plaster: 'Whitewashing the walls…', stoneWhite: 'Laying the courses…', planks: 'Sawing floorboards…', rock: 'Weathering the rock…', copper: 'Greening the copper…', rug: 'Weaving rugs…', quilt: 'Stitching the quilt…',
   }[name] || undefined));
-  ctx.T = T;
+  ctx.T = T; mark('textures');
   const M = createMaterials(T, renderer);
-  ctx.M = M;
+  ctx.M = M; mark('materials');
   setLoad(0.72, 'Raising the island…');
   await tick();
   ctx.island = makeIslandTexture();
@@ -81,14 +86,16 @@ async function main() {
   const game = new Game(ctx); ctx.game = game;
   const inter = new Interaction(ctx, camera); ctx.inter = inter;
   const weather = new Weather(ctx); ctx.weather = weather;
-  buildIsland(ctx);
+  buildIsland(ctx); mark('island');
   setLoad(0.8, 'Building the tower…');
   await tick();
-  buildTower(ctx);
+  buildTower(ctx); mark('tower');
   const player = new Player(ctx, camera); ctx.player = player;
   setLoad(0.86, 'Furnishing the rooms…');
   await tick();
+  mark('player');
   if (!new URLSearchParams(location.search).has('bare')) buildInterior(ctx); // ?bare skips the furnishings (debugging the shell)
+  mark('interior');
   const ocean = new Ocean(ctx); ctx.ocean = ocean;
   ctx.ship = new Ship(ctx);
 
@@ -112,12 +119,16 @@ async function main() {
   }
   ctx.moon = moon; ctx.hemi = hemi;
   const rig = new LightRig(ctx); ctx.rig = rig;
+  const motes = new Motes(ctx); ctx.motes = motes;
   // the lens lamp is a virtual lamp like any other: it can borrow a shadow slot (lens bars sweeping the room)
   const lensLamp = addLamp(ctx, 0, LENS_Y, 0, { color: 0xffe2b0, base: 0, dist: 18, manual: true, room: 'lantern' });
   ctx.refreshShadows = () => { if (quality.shadows) moon.shadow.needsUpdate = true; };
 
   // post-processing: HDR scene target -> AO -> bloom -> composite (tone map, grade, lens drops, grain)
   const post = new Post(renderer, scene, camera, quality);
+  const governor = new Governor(ctx, post, renderer);
+  ctx.governor = governor;
+  ctx.onQualityDropped = () => { if (qualityName === 'high') store.set('quality', 'medium'); };
   ctx.post = { wet: 0, fx: post };
 
   // ---- interaction with the page
@@ -190,10 +201,13 @@ async function main() {
   setLoad(0.94, 'Lighting the lamps…');
   await tick();
   player.update(0.016);
+  mark('prewarm');
   if (renderer.compileAsync) { try { await renderer.compileAsync(scene, camera); } catch { /* fall back to lazy compile */ } }
+  mark('compiled');
   ctx.refreshShadows();
   weather.light.shadow.needsUpdate = true;
   post.render();
+  mark('ready');
   setLoad(1, 'Ready.');
   $('loading').classList.add('hidden');
   $('menu').classList.remove('hidden');
@@ -206,7 +220,9 @@ async function main() {
   let outK = 1, frames = 0;
   const look = ctx.look = { ambientIn: 0.8, exposureIn: 0.3, lampGain: 1.35 }; // tweakable live from the console
   const frame = (fixedDt) => {
-    const dt = fixedDt ?? Math.min(clock.getDelta(), 0.05);
+    const rawDt = fixedDt === undefined ? clock.getDelta() : 0;
+    const dt = fixedDt ?? Math.min(rawDt, 0.05);
+    if (fixedDt === undefined) governor.tick(rawDt, started && !document.hidden && $('pause').classList.contains('hidden'));
     ctx.time += dt;
     const t = ctx.time;
     const S = game.S;
@@ -253,8 +269,10 @@ async function main() {
     hemi.intensity = (0.5 + weather.flash * 1.5) * outK + (look.ambientIn + weather.flash * 0.35) * (1 - outK) + weather.calm * 0.6;
     renderer.toneMappingExposure = 1.2 + look.exposureIn * (1 - outK); // the eye opens up a little indoors
     moon.intensity = (0.10 + 0.75 * weather.moonVis) * (quality.shadows ? 1 : 0.08 + 0.92 * outK) + weather.calm * 0.4;
-    rig.update(dt); // lend shadow-casting twins to the lamps nearest the camera
+    rig.update(dt); // lend real lights (two with shadows) to the lamps that matter most
+    motes.update(t, outK);
 
+    rainWet.value = 1 - weather.calm * 0.85;
     // wet lens outside
     ctx.post.wet = player.indoor ? Math.max(0, ctx.post.wet - dt * 0.35) : Math.min(1, ctx.post.wet + dt * 0.2 * (1 - weather.calm));
     post.u.uWet.value = Math.min(1.6, ctx.post.wet) * 0.55;

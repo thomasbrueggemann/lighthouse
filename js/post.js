@@ -186,7 +186,7 @@ export class Post {
   constructor(renderer, scene, camera, quality) {
     this.r = renderer; this.scene = scene; this.camera = camera; this.q = quality;
     this.quad = new FullScreenQuad(null);
-    this.ao = !!quality.ao; this.bloom = !!quality.bloom;
+    this.ao = !!quality.ao; this.bloom = !!quality.bloom; this.samples = quality.name === 'low' ? 0 : 4;
     this.size = new THREE.Vector2();
     this.u = { // live-tunable look parameters
       uTime: { value: 0 }, uWet: { value: 0 }, uRes: { value: new THREE.Vector2() }, uExposure: { value: 1.2 },
@@ -205,7 +205,7 @@ export class Post {
     this.dispose(true);
     this.depth = new THREE.DepthTexture(w, h);
     this.depth.type = THREE.UnsignedIntType; this.depth.minFilter = this.depth.magFilter = THREE.NearestFilter;
-    this.sceneRT = new THREE.WebGLRenderTarget(w, h, { type: THREE.HalfFloatType, samples: this.q.name === 'low' ? 0 : 4, depthTexture: this.depth, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
+    this.sceneRT = new THREE.WebGLRenderTarget(w, h, { type: THREE.HalfFloatType, samples: this.samples, depthTexture: this.depth, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
     this.rts.push(this.sceneRT);
     this.u.uRes.value.set(w, h);
 
@@ -241,6 +241,9 @@ export class Post {
   }
 
   setSize() { this.build(); }
+
+  // change effects at run time (the quality governor uses this); rebuilds the targets and the composite
+  configure({ ao = this.ao, samples = this.samples } = {}) { this.ao = ao; this.samples = samples; this.build(); }
 
   dispose(keepQuad = false) {
     for (const rt of this.rts) rt.dispose();

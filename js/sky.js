@@ -66,6 +66,23 @@ vec3 stormSky(vec3 d, float full){
 }
 `;
 
+// A cheap stand-in for the sky when reflecting it in wet stone and puddles: gradient, a few cloud octaves, the moon and the flashes.
+export const GLSL_PROBE = /* glsl */`
+${GLSL_NOISE}
+uniform float uTime, uFlash, uMoonVis;
+uniform vec3 uFlashDir, uMoonDir;
+vec3 skyProbe(vec3 d){
+  float hh = max(d.y, 0.0);
+  vec3 base = mix(vec3(0.058, 0.072, 0.092), vec3(0.012, 0.017, 0.03), smoothstep(0.0, 0.5, hh));
+  float cover = smoothstep(0.3, 0.8, fbm3(d.xz / (hh + 0.15) * 0.5 + vec2(uTime * 0.02, uTime * 0.008)));
+  float md = max(dot(d, uMoonDir), 0.0);
+  vec3 col = mix(base, vec3(0.02, 0.026, 0.04), cover * 0.6);
+  col += vec3(0.30, 0.38, 0.55) * (pow(md, 6.0) * 0.25 + pow(md, 60.0) * 1.2) * (0.3 + uMoonVis * (1.0 - cover * 0.7));
+  col += vec3(0.5, 0.58, 0.85) * uFlash * (0.3 + 0.7 * pow(max(dot(d, normalize(uFlashDir)), 0.0), 3.0)) * (0.2 + cover) * 1.6;
+  return col;
+}
+`;
+
 // small helper so callers don't have to know the uniform names
 export function updateSky(t, flash, flashDir, calm, moonVis) {
   skyU.uTime.value = t;
