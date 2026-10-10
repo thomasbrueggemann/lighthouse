@@ -337,7 +337,6 @@ export function buildInterior(ctx) {
     { const gb = new Builder(); for (let k = 0; k < 6; k++) gb.box(0.02, 0.28, 0.02, M.ironBlack, -0.15 + k * 0.06, 0, 0.012); gb.box(0.36, 0.02, 0.02, M.ironBlack, 0, 0.14, 0.012); gb.box(0.36, 0.02, 0.02, M.ironBlack, 0, -0.14, 0.012); gb.build(grillBars); }
     const stoveL = new THREE.PointLight(0xff7a30, 0, 10, 2);
     stoveL.position.copy(toWorld(stoveA, 3.55, y, -0.22, 0.45, 0.6)); g.add(stoveL);
-    stoveL.castShadow = ctx.quality.shadows; stoveL.shadow.mapSize.set(512, 512); stoveL.shadow.bias = -0.004; stoveL.shadow.camera.near = 0.1;
     ctx.lights.push({ light: stoveL, base: 7, flicker: 0.3, on: () => S.stoveLit });
     ctx.stoveLight = stoveL;
     const stoveGrp = group(); stoveGrp.add(grill);

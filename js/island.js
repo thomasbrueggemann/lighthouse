@@ -146,9 +146,29 @@ export function buildIsland(ctx) {
     colors[i * 3] = r * k; colors[i * 3 + 1] = g * k; colors[i * 3 + 2] = b * k;
   }
   geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-  const land = new THREE.Mesh(geo, M.rock);
-  land.receiveShadow = true; land.castShadow = true; land.name = 'terrain';
-  group.add(land);
+  // split into a 6x6 grid of chunks that share the vertex buffers: each gets its own bounds, so the main pass and
+  // every shadow-map face cull the parts of the island they cannot see
+  const N = 6, per = SEG / N, row = SEG + 1, srcIdx = geo.index.array;
+  const chunkIdx = Array.from({ length: N * N }, () => []);
+  for (let t = 0; t < srcIdx.length; t += 3) {
+    const a = srcIdx[t], ix = a % row, iy = (a / row) | 0;
+    chunkIdx[Math.min(N - 1, (iy / per) | 0) * N + Math.min(N - 1, (ix / per) | 0)].push(srcIdx[t], srcIdx[t + 1], srcIdx[t + 2]);
+  }
+  for (let c = 0; c < N * N; c++) {
+    const idx = chunkIdx[c]; if (!idx.length) continue;
+    const g = new THREE.BufferGeometry();
+    for (const k of ['position', 'normal', 'uv', 'color']) g.setAttribute(k, geo.attributes[k]);
+    g.setIndex(idx);
+    let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9, z0 = 1e9, z1 = -1e9;
+    for (const v of idx) {
+      const x = pos.getX(v), y = pos.getY(v), z = pos.getZ(v);
+      if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; if (z < z0) z0 = z; if (z > z1) z1 = z;
+    }
+    g.boundingSphere = new THREE.Sphere(new THREE.Vector3((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2), Math.hypot(x1 - x0, y1 - y0, z1 - z0) / 2);
+    const land = new THREE.Mesh(g, M.rock);
+    land.receiveShadow = true; land.castShadow = true; land.name = 'terrain';
+    group.add(land);
+  }
 
 
   const B = new Builder();

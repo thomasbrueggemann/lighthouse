@@ -177,17 +177,31 @@ export class Builder {
   cyl(rt, rb, h, mat, x = 0, y = 0, z = 0, seg = 16, rx = 0, ry = 0, rz = 0, ts = 0.8, open = false) {
     return this.add(cylGeo(rt, rb, h, seg, open, ts), mat, x, y, z, rx, ry, rz);
   }
-  build(parent, { shadows = true, name = '' } = {}) {
+  // Large merges are split into spatial cells (10 m across, one per storey) so frustum culling works per cell:
+  // the main pass and every shadow-map face then only draw what is actually near them.
+  static bucket(list) {
+    const cells = new Map(), c = new THREE.Vector3();
+    for (const g of list) {
+      g.computeBoundingBox(); g.boundingBox.getCenter(c);
+      const key = `${Math.floor((c.x + 5) / 10)}|${Math.floor((c.y - 6.8) / 4.5)}|${Math.floor((c.z + 5) / 10)}`;
+      if (!cells.has(key)) cells.set(key, []);
+      cells.get(key).push(g);
+    }
+    return [...cells.values()];
+  }
+  build(parent, { shadows = true, name = '', chunk = true } = {}) {
     const meshes = [];
     for (const [mat, list] of this.groups) {
       if (!list.length) continue;
-      const merged = mergeGeometries(list, false);
-      if (!merged) { console.warn('merge failed', name, mat); continue; }
-      merged.computeBoundingSphere();
-      const mesh = new THREE.Mesh(merged, mat);
-      mesh.castShadow = shadows && !mat.transparent; mesh.receiveShadow = true;
-      mesh.name = name;
-      parent.add(mesh); meshes.push(mesh);
+      for (const part of chunk && list.length > 24 ? Builder.bucket(list) : [list]) {
+        const merged = mergeGeometries(part, false);
+        if (!merged) { console.warn('merge failed', name, mat); continue; }
+        merged.computeBoundingSphere();
+        const mesh = new THREE.Mesh(merged, mat);
+        mesh.castShadow = shadows && !mat.transparent; mesh.receiveShadow = true;
+        mesh.name = name;
+        parent.add(mesh); meshes.push(mesh);
+      }
       list.forEach(g => g.dispose());
     }
     this.groups.clear();

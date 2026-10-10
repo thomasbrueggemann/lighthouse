@@ -51,7 +51,7 @@ vec3 stormSky(vec3 d, float full){
 
   vec3 col = mix(base, cloud, cover);
   // the moon itself, seen through the thin spots
-  float disc = smoothstep(0.9992, 0.9996, md);
+  float disc = smoothstep(0.99905, 0.99965, md);
   col += vec3(0.85, 0.92, 1.1) * disc * pow(1.0 - cover, 2.0) * (0.3 + uMoonVis) * 1.8;
   col += vec3(0.30, 0.38, 0.55) * pow(md, 220.0) * (1.0 - cover * 0.8) * (0.3 + uMoonVis);
 

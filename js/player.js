@@ -48,6 +48,13 @@ export class Player {
     this.camera.add(g);
     const L = new THREE.PointLight(0xffb060, 4.2, 16, 1.7);
     L.position.set(0.24, -0.15, -0.45);
+    if (this.ctx.quality.shadows) {
+      // the lantern in your hand throws real shadows (re-rendered every frame: it moves with you)
+      L.castShadow = true;
+      L.shadow.mapSize.set(512, 512);
+      L.shadow.bias = -0.003; L.shadow.normalBias = 0.03; L.shadow.radius = 2.2;
+      L.shadow.camera.near = 0.08;
+    }
     this.camera.add(L);
     this.lantern = { g, light: L, flame, on: true, t: 1 };
   }
@@ -140,6 +147,7 @@ export class Player {
     L.g.rotation.z = Math.sin(this.bob * 0.5) * 0.06 * bobA;
     const fl = 0.85 + Math.sin(ctx.time * 23) * 0.05 + Math.sin(ctx.time * 37.3) * 0.05 + (Math.random() - 0.5) * 0.06;
     L.light.intensity = 4.2 * L.t * fl;
+    L.light.shadow.autoUpdate = L.t > 0.05; // a lowered lantern costs nothing
     L.flame.visible = L.t > 0.5;
   }
 }

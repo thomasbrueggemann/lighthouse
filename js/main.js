@@ -1,10 +1,4 @@
 import * as THREE from 'three';
-import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
-import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
-import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
-import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
-import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
-
 import { generateTextures } from './textures.js';
 import { createMaterials } from './materials.js';
 import { CollisionWorld } from './collision.js';
@@ -14,6 +8,8 @@ import { buildInterior } from './interior.js';
 import { Ocean, waveHeight } from './ocean.js';
 import { Weather } from './weather.js';
 import { MOON_DIR } from './sky.js';
+import { Post } from './post.js';
+import { LightRig } from './lights.js';
 import { Player } from './player.js';
 import { Interaction } from './interact.js';
 import { Game, Ship, TREASURES } from './game.js';
@@ -36,14 +32,14 @@ const setLoad = (p, msg) => { $('loadfill').style.width = `${Math.round(p * 100)
 
 async function main() {
   const qualityName = store.get('quality', 'high');
-  const quality = { name: qualityName, shadows: qualityName === 'high', bloom: qualityName !== 'low', pixelRatio: qualityName === 'high' ? Math.min(devicePixelRatio, 1.5) : 1 };
+  const quality = { name: qualityName, shadows: qualityName === 'high', bloom: qualityName !== 'low', ao: qualityName === 'high', pixelRatio: qualityName === 'high' ? Math.min(devicePixelRatio, 1.5) : 1 };
   const settings = { sens: store.get('sens', 1) };
 
   const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
   renderer.setPixelRatio(quality.pixelRatio);
   renderer.setSize(innerWidth, innerHeight);
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.2;
+  renderer.toneMapping = THREE.NoToneMapping; // tone mapping and grading happen in the post composite
+  renderer.toneMappingExposure = 1.2; // the exposure the composite reads
   renderer.shadowMap.enabled = quality.shadows;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   // shadow maps are refreshed per light (light.shadow.needsUpdate) rather than every frame
@@ -113,52 +109,13 @@ async function main() {
     moon.shadow.autoUpdate = false; moon.shadow.needsUpdate = true;
   }
   ctx.moon = moon; ctx.hemi = hemi;
+  const rig = new LightRig(ctx); ctx.rig = rig;
+  rig.addExtra(ctx.tower.lens.lampLight); // the lens lamp can borrow a shadow slot too (lens bars sweeping the room)
   ctx.refreshShadows = () => { if (quality.shadows) moon.shadow.needsUpdate = true; };
 
-  // post-processing
-  const size = new THREE.Vector2(); renderer.getDrawingBufferSize(size);
-  const rt = new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType, samples: quality.name === 'low' ? 0 : 4 });
-  const composer = new EffectComposer(renderer, rt);
-  composer.addPass(new RenderPass(scene, camera));
-  const bloom = new UnrealBloomPass(new THREE.Vector2(size.x / 2, size.y / 2), 0.6, 0.55, 0.92);
-  if (quality.bloom) composer.addPass(bloom);
-  composer.addPass(new OutputPass());
-  const finalPass = new ShaderPass({
-    uniforms: { tDiffuse: { value: null }, uTime: { value: 0 }, uWet: { value: 0 }, uRes: { value: new THREE.Vector2(size.x, size.y) }, uFade: { value: 0 } },
-    vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.); }',
-    fragmentShader: `
-      uniform sampler2D tDiffuse; uniform float uTime, uWet, uFade; uniform vec2 uRes; varying vec2 vUv;
-      float h21(vec2 p){ p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
-      vec2 drops(vec2 uv, float t){
-        vec2 asp = vec2(uRes.x / uRes.y, 1.); vec2 off = vec2(0.);
-        for (int l = 0; l < 2; l++){
-          float sc = l == 0 ? 9. : 17.;
-          vec2 p = uv * asp * sc; p.y += t * 0.04 * float(l + 1);
-          vec2 id = floor(p), f = fract(p) - .5;
-          float r1 = h21(id + float(l) * 7.3), r2 = h21(id * 1.7 + 3.1);
-          vec2 c = (vec2(r1, r2) - .5) * .6;
-          float life = fract(t * (.12 + r1 * .2) + r2);
-          float rad = (.12 + .22 * h21(id + 11.)) * smoothstep(0., .08, life) * smoothstep(1., .55, life);
-          vec2 d = f - c; float dist = length(d * vec2(1., .85));
-          float m = smoothstep(rad, rad * .6, dist) * step(.45, h21(id + 5.));
-          off += d * m * -.9 / sc;
-        }
-        return off;
-      }
-      void main(){
-        vec2 uv = vUv;
-        vec2 o = uWet > 0.001 ? drops(uv, uTime) * uWet : vec2(0.);
-        vec3 col = texture2D(tDiffuse, uv + o).rgb;
-        float e = length(o) * 60.; col += vec3(e * 0.02);
-        vec2 q = uv - .5; float vig = smoothstep(.95, .25, length(q * vec2(1.1, 1.)));
-        col *= mix(.55, 1., vig);
-        col += (h21(uv * uRes + fract(uTime) * 100.) - .5) * .028;
-        col *= 1. - uFade;
-        gl_FragColor = vec4(col, 1.);
-      }`,
-  });
-  composer.addPass(finalPass);
-  ctx.post = { wet: 0 };
+  // post-processing: HDR scene target -> AO -> bloom -> composite (tone map, grade, lens drops, grain)
+  const post = new Post(renderer, scene, camera, quality);
+  ctx.post = { wet: 0, fx: post };
 
   // ---- interaction with the page
   let locked = false, started = false, ended = false;
@@ -223,9 +180,7 @@ async function main() {
   addEventListener('resize', () => {
     camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
     renderer.setSize(innerWidth, innerHeight);
-    renderer.getDrawingBufferSize(size);
-    composer.setSize(innerWidth, innerHeight);
-    finalPass.uniforms.uRes.value.set(size.x, size.y);
+    post.setSize();
   });
 
   // ---- warm up
@@ -235,7 +190,7 @@ async function main() {
   if (renderer.compileAsync) { try { await renderer.compileAsync(scene, camera); } catch { /* fall back to lazy compile */ } }
   ctx.refreshShadows();
   weather.light.shadow.needsUpdate = true;
-  composer.render();
+  post.render();
   setLoad(1, 'Ready.');
   $('loading').classList.add('hidden');
   $('menu').classList.remove('hidden');
@@ -290,11 +245,12 @@ async function main() {
     ctx.outK = outK;
     hemi.intensity = (0.5 + weather.flash * 1.5) * (0.25 + 0.75 * outK) + weather.calm * 0.6;
     moon.intensity = (0.10 + 0.75 * weather.moonVis) * (quality.shadows ? 1 : 0.08 + 0.92 * outK) + weather.calm * 0.4;
+    rig.update(dt); // lend shadow-casting twins to the lamps nearest the camera
 
     // wet lens outside
     ctx.post.wet = player.indoor ? Math.max(0, ctx.post.wet - dt * 0.35) : Math.min(1, ctx.post.wet + dt * 0.2 * (1 - weather.calm));
-    finalPass.uniforms.uWet.value = Math.min(1.6, ctx.post.wet) * 0.55;
-    finalPass.uniforms.uTime.value = t;
+    post.u.uWet.value = Math.min(1.6, ctx.post.wet) * 0.55;
+    post.u.uTime.value = t;
 
     // audio
     camera.getWorldDirection(fwd);
@@ -302,7 +258,7 @@ async function main() {
     audio.update(dt, { pos: camera.position, fwd, indoor: player.indoor, underground: player.underground, gust: weather.gust, calm: weather.calm, shoreDist: Math.max(0, Math.hypot(p.x, p.z) - 22) + Math.max(0, p.y - 4) * 0.8 });
 
     if (started) ui.location(ZONES[player.zone] || '');
-    if (fixedDt === undefined || render) composer.render();
+    if (fixedDt === undefined || render) post.render();
     if (++frames === 3) ctx.refreshShadows();
   };
   let render = true;
