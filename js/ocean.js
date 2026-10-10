@@ -127,6 +127,11 @@ export class Ocean {
           water += vec3(0.02, 0.11, 0.1) * sss * 1.6;
           float near = exp(-max(-rh, 0.) * 0.3) * step(-29., rh);
           water = mix(water, uShallow * 1.8 * amb, near * 0.45);
+          // sunrise: the swell facing the sun picks up its colour, and backlit crests glow green-gold
+          vec3 Ls = normalize(uSunDir);
+          float sunUp = smoothstep(-0.04, 0.03, Ls.y) * uDawn;
+          water += vec3(0.50, 0.16, 0.05) * pow(max(dot(N, Ls), 0.), 2.0) * sunUp * (0.3 + 0.7 * depthT) * 0.35;
+          water += vec3(0.12, 0.15, 0.06) * pow(max(dot(V, -Ls), 0.), 3.) * smoothstep(0.25, 1.3, vH) * sunUp * 0.9;
           vec3 col = mix(water, sky, fres);
           // the moon's glitter path: GGX highlight off the chop (sharp sparkle) plus a broad sheen along the same line
           vec3 Hm = normalize(Lm + V);
@@ -136,7 +141,15 @@ export class Ocean {
           float D = a2 / (PI * dd * dd);
           float fm = 0.04 + 0.96 * pow(1. - max(dot(V, Hm), 0.), 5.);
           float horizon = smoothstep(0.0, 0.12, Lm.y) * smoothstep(0.0, 0.03, V.y);
-          col += vec3(0.60, 0.72, 1.0) * (D * fm * 0.012 + pow(NdH, 36.) * 0.05 * (0.3 + 0.7 * fm)) * moonK * horizon * uGlitter * (1.0 - smoothstep(120., 420., dist));
+          float fade = 1.0 - smoothstep(120., 420., dist);
+          col += vec3(0.60, 0.72, 1.0) * (D * fm * 0.012 + pow(NdH, 36.) * 0.05 * (0.3 + 0.7 * fm)) * moonK * horizon * uGlitter * fade * (1.0 - 0.7 * uDawn);
+          // ...and the sun's, the same highlight in gold
+          vec3 Hs = normalize(Ls + V);
+          float NdHs = max(dot(N, Hs), 0.);
+          float dds = NdHs * NdHs * (a2 - 1.) + 1.;
+          float Ds = a2 / (PI * dds * dds);
+          float fsn = 0.04 + 0.96 * pow(1. - max(dot(V, Hs), 0.), 5.);
+          col += vec3(1.0, 0.62, 0.30) * (Ds * fsn * 0.012 + pow(NdHs, 80.) * 0.05 * (0.3 + 0.7 * fsn)) * sunUp * smoothstep(0.0, 0.03, V.y) * uGlitter * 2.2 * fade;
           // lighthouse beam sweeping the sea
           vec3 toF = vW - uLantern;
           float hd = length(toF.xz);
@@ -160,12 +173,21 @@ export class Ocean {
           foamAmt *= smoothstep(0.3, 0.75, fn2 * 0.75 + foamAmt * 0.45);
           foamAmt += smoothstep(0.3, 0.9, fn) * 0.06;
           foamAmt = clamp(foamAmt, 0., 1.);
-          vec3 foamCol = uFoam * (0.2 * uAmbient + moonK * 0.34 + uFlash * 4.0) * vec3(0.84, 0.92, 1.0) + vec3(1., .93, .75) * beam * 0.5 * 30. / (hd * 0.12 + 6.);
+          vec3 foamCol = uFoam * (0.2 * uAmbient + moonK * 0.34 + uFlash * 4.0 + sunUp * 0.5) * mix(vec3(0.84, 0.92, 1.0), vec3(1.0, 0.82, 0.66), sunUp) + vec3(1., .93, .75) * beam * 0.5 * 30. / (hd * 0.12 + 6.);
           col = mix(col, foamCol, foamAmt);
           gl_FragColor = vec4(col, 1.);
           #include <tonemapping_fragment>
           #include <colorspace_fragment>
-          #include <fog_fragment>
+          // the haze the far sea fades into carries the glow of the sunrise on the sun's side
+          #ifdef USE_FOG
+            #ifdef FOG_EXP2
+              float fogFactor = 1.0 - exp(-fogDensity * fogDensity * vFogDepth * vFogDepth);
+            #else
+              float fogFactor = smoothstep(fogNear, fogFar, vFogDepth);
+            #endif
+            vec3 vd = normalize(vW - cameraPosition);
+            gl_FragColor.rgb = mix(gl_FragColor.rgb, fogColor + dawnGlow(normalize(vec3(vd.x, 0.02, vd.z))), fogFactor);
+          #endif
         }`,
     });
     this.mesh = new THREE.Mesh(oceanGeometry(), mat);

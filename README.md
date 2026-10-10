@@ -69,7 +69,7 @@ css/style.css
 js/main.js        renderer, lighting, main loop, debug hooks
 js/post.js        post-processing: HDR MSAA target, depth-based AO, dual-filter bloom, tone map & grade
 js/config.js      tower dimensions, floors, the spiral stair, windows
-js/sky.js         the storm sky (clouds lit by the moon), shared by the dome and the sea's reflections
+js/sky.js         the storm sky (clouds lit by the moon) and the sunrise that follows it, shared by the dome and the sea's reflections
 js/lights.js      virtual lamps and the pool of real lights lent to the ones that matter, with shadows
 js/textures.js    procedural PBR textures (colour, normal, roughness) and canvas textures
 js/materials.js   materials, triplanar wet-rock shader, reflection env map
@@ -79,7 +79,7 @@ js/furniture.js   the prop library (chamfered furniture, fabrics, lamps, fire) a
 js/rooms/         one module per storey (store, kitchen, parlour, bedroom, guest, study, library, workshop, watch)
 js/interior.js    puts the rooms together, plus the cellar, cave, lantern room, oil store
 js/ocean.js       Gerstner-wave ocean (GPU + matching CPU heights), surf foam, beam glints
-js/weather.js     storm sky, rain, lightning & thunder, wave spray
+js/weather.js     storm sky, rain, lightning & thunder, wave spray; once the log is written the storm clears and the lightning light becomes the sun
 js/player.js      first-person movement & collision, the hand lantern
 js/collision.js   segment/circle walls + raycast ground
 js/interact.js    look-and-use interaction system
@@ -95,5 +95,6 @@ Open the console on the running game and use `skerry`:
 
 - `skerry.shot(x, y, z, yaw, pitch)` parks the camera and draws a frame (useful in a hidden tab); `skerry.lamp()` lights the lamp.
 - `skerry.checkWalk()` flood-fills every storey and reports unreachable stairs or objects; `skerry.checkClimb()` walks a simulated player up every flight to the lantern.
+- `skerry.weather.calm = 1` (0 to 1) jumps to the clearing storm and sunrise that follows the final log entry; `skerry.onLogWritten()` plays the real ninety-second transition.
 - `skerry.look` holds the interior brightness (`ambientIn`, `exposureIn`, `lampGain`); `skerry.layoutIssues` lists any furniture the placement helpers found on the stairs.
 - Add `?bare` to the URL to leave the rooms unfurnished.

@@ -1,13 +1,14 @@
-// Watches real frame times and, if the game cannot hold about 36 fps, steps the expensive effects down one at a time:
+// Watches real frame times and, if the game cannot hold about 27 fps, steps the expensive effects down one at a time:
 // resolution scale, ambient occlusion, dynamic shadows, then MSAA. It never steps back up (that would oscillate), and it
-// remembers where it ended up so the next visit starts there.
+// remembers where it ended up so the next visit starts there. The bar sits below 30 fps on purpose: browsers cap
+// requestAnimationFrame at 30 in Low Power Mode, and a capped but idle GPU must not be mistaken for a slow one.
 const STEPS = ['resolution', 'ao', 'shadows', 'msaa'];
 
 export class Governor {
   constructor(ctx, post, renderer) {
     this.ctx = ctx; this.post = post; this.renderer = renderer;
     this.samples = []; this.level = 0; this.cool = 6; this.last = 0;
-    this.slowMs = 1000 / 36;
+    this.slowMs = 1000 / 27;
   }
 
   // call once per animation frame with the unclamped frame time (seconds); `active` is false while paused or hidden

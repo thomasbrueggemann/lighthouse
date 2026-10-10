@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { GLSL_SKY, skyU, updateSky } from './sky.js';
+import { GLSL_SKY, skyU, updateSky, dawnState, sunDirAt, SUN_SIN_FINAL } from './sky.js';
 import { waveHeight } from './ocean.js';
 import { shorePoints } from './island.js';
 import { TAU, SHED, R_OUT_BASE, R_OUT_TOP, TOWER_BASE, TOWER_TOP, LANTERN_Y, clamp } from './config.js';
@@ -8,6 +8,7 @@ export class Weather {
   constructor(ctx) {
     this.ctx = ctx;
     this.flash = 0; this.gust = 0.5; this.calm = 0;
+    this.sun = dawnState(0); this.sunSet = false;
     this.nextStrike = 5 + Math.random() * 5;
     this.seq = null; this.seqT = 0;
     this.flashDir = new THREE.Vector3(1, 0.5, 0).normalize();
@@ -30,7 +31,7 @@ export class Weather {
         void main(){
           vec3 d = normalize(vD);
           vec3 col = stormSky(d, 1.0);
-          col = mix(col, uFog, smoothstep(0.14, -0.04, d.y));
+          col = mix(col, uFog + dawnGlow(normalize(vec3(d.x, 0.02, d.z))), smoothstep(0.14, -0.04, d.y));
           gl_FragColor = vec4(col, 1.);
           #include <tonemapping_fragment>
           #include <colorspace_fragment>
@@ -57,7 +58,7 @@ export class Weather {
     g.setIndex(new THREE.BufferAttribute(idx, 1));
     this.rainU = {
       uTime: { value: 0 }, uCam: { value: new THREE.Vector3() }, uBox: { value: new THREE.Vector3(44, 26, 44) }, uWind: { value: new THREE.Vector2(9, 3) },
-      uIsland: { value: this.ctx.island.tex }, uIslandRect: { value: this.ctx.island.rect }, uFlash: { value: 0 }, uAmount: { value: 1 }, uBeam: { value: 0 },
+      uIsland: { value: this.ctx.island.tex }, uIslandRect: { value: this.ctx.island.rect }, uFlash: { value: 0 }, uAmount: { value: 1 }, uBeam: { value: 0 }, uDawn: { value: 0 },
       uShed: { value: new THREE.Vector4(SHED.x, SHED.z, SHED.w / 2 + 0.4, SHED.d / 2 + 0.4) },
     };
     const mat = new THREE.ShaderMaterial({
@@ -84,7 +85,7 @@ export class Weather {
           if (fract(position.y * 37.1) > uAmount) hide = 1.0;
           float d = length(p - uCam);
           vNear = exp(-d * 0.22);
-          vA = (1.0 - hide) * (1.0 - smoothstep(12., 22., d));
+          vA = (1.0 - hide) * (1.0 - smoothstep(12., 22., d)) * smoothstep(0.7, 2.4, d);   // a drop right at the lens would be a laser-like line
           // widen the quad perpendicular to the streak, in view space, so it always faces the camera and never thins below a pixel
           vec4 mvh = viewMatrix * vec4(p, 1.0), mvt = viewMatrix * vec4(tail, 1.0);
           vec3 axis = normalize(mvt.xyz - mvh.xyz);
@@ -95,10 +96,11 @@ export class Weather {
           vAlong = aEnd; vS = aSide;
           gl_Position = projectionMatrix * mv;
         }`,
-      fragmentShader: `uniform float uFlash, uBeam; varying float vA; varying float vNear; varying float vAlong; varying float vS;
+      fragmentShader: `uniform float uFlash, uBeam, uDawn; varying float vA; varying float vNear; varying float vAlong; varying float vS;
         void main(){ if (vA < 0.01) discard;
           float soft = 1.0 - vS * vS, taper = 1.0 - vAlong;
           vec3 c = vec3(0.55,0.6,0.66) * (0.12 + uFlash * 3.0 + uBeam * 0.18) + vec3(1.0,0.75,0.45) * vNear * 0.26;
+          c = mix(c, vec3(1.0, 0.62, 0.34) * (0.18 + vNear * 0.3), uDawn * 0.75);   // what rain is left at sunrise catches the light
           gl_FragColor = vec4(c, vA * (0.13 + vNear * 0.17) * soft * taper); }`,
     });
     this.rain = new THREE.Mesh(g, mat);
@@ -193,9 +195,9 @@ export class Weather {
   update(dt, t, camera, indoor) {
     const c = this.calm;
     this.gust = clamp(0.55 + 0.25 * Math.sin(t * 0.21) * Math.sin(t * 0.53 + 1.3) + 0.2 * Math.sin(t * 1.7) * Math.sin(t * 0.31), 0, 1) * (1 - c * 0.7);
-    // lightning
+    // lightning (the storm is over once the sky starts to clear)
     this.nextStrike -= dt;
-    if (this.nextStrike <= 0) { this.strike(); this.nextStrike = (7 + Math.random() * 16) * (1 + c * 4); }
+    if (this.nextStrike <= 0) { if (c < 0.2) this.strike(); this.nextStrike = (7 + Math.random() * 16) * (1 + c * 4); }
     let f = 0;
     if (this.seq) {
       this.seqT += dt;
@@ -209,17 +211,30 @@ export class Weather {
     }
     this.flash = f;
     // without shadow maps the flash would light the rooms straight through the walls
-    this.light.intensity = f * 5.5 * (this.ctx.quality.shadows ? 1 : 0.06 + 0.94 * (this.ctx.outK ?? 1));
+    const shadowed = this.ctx.quality.shadows ? 1 : 0.06 + 0.94 * (this.ctx.outK ?? 1);
     const r = this.ctx.renderer;
 
     // the cloud deck parts around the moon now and then; the moonlight itself follows `moonVis`
     const swell = 0.5 + 0.5 * Math.sin(t * 0.06 + 0.5);
     this.moonVis = clamp(swell * swell * (0.85 + 0.15 * Math.sin(t * 0.23)) + c, 0, 1);
-    updateSky(t, f, this.flashDir, c, this.moonVis);
+    const sun = this.sun = updateSky(t, f, this.flashDir, c, this.moonVis);
     this.sky.position.copy(camera.position);
+
+    // the lightning light has nothing left to do once the storm is gone, so it becomes the sun: pointed at the sunrise
+    // once (its shadow map is rendered then and never again), warm, and brought up as the disc clears the horizon
+    if (c > 0.3 && !this.sunSet) {
+      this.sunSet = true;
+      const L = this.light;
+      L.color.setRGB(1.0, 0.46, 0.17);
+      L.position.copy(sunDirAt(SUN_SIN_FINAL)).multiplyScalar(120).add(L.target.position);
+      L.shadow.bias = -0.0004; L.shadow.normalBias = 0.07;
+      L.shadow.needsUpdate = true;
+    }
+    this.light.intensity = f * 5.5 * shadowed + (this.sunSet ? sun.up * 3.6 * shadowed : 0);
+
     const fog = this.ctx.scene.fog;
     fog.color.copy(this.ctx.fogBase).lerp(this.ctx.fogFlash, f * 0.6);
-    fog.color.lerp(this.ctx.fogDawn, c);
+    fog.color.lerp(this.ctx.fogDawn, sun.glow);
     this.skyU.uFog.value.copy(fog.color);
 
     this.rainU.uTime.value = t;
@@ -227,6 +242,7 @@ export class Weather {
     this.rainU.uFlash.value = f;
     this.rainU.uWind.value.set(7 + this.gust * 8, 2 + this.gust * 3);
     this.rainU.uAmount.value = 1 - c * 0.85;
+    this.rainU.uDawn.value = sun.glow;
 
     // shore spray
     const pts = this.shore;

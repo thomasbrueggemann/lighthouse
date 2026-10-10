@@ -18,7 +18,7 @@ import { Interaction } from './interact.js';
 import { Game, Ship, TREASURES } from './game.js';
 import { AudioEngine } from './audio.js';
 import { UI } from './ui.js';
-import { LENS_Y, R_GLASS, LANTERN_Y, FLOORS } from './config.js';
+import { LENS_Y, R_GLASS, LANTERN_Y, FLOORS, smoothstep } from './config.js';
 
 const store = {
   get(k, d) { try { const v = localStorage.getItem('skerry.' + k); return v === null ? d : JSON.parse(v); } catch { return d; } },
@@ -62,7 +62,7 @@ async function main() {
   const ctx = {
     scene, renderer, camera, quality, settings, ui, audio,
     occluders: [], lights: [], time: 0,
-    fogBase, fogFlash: new THREE.Color().setRGB(0.26, 0.31, 0.46, THREE.LinearSRGBColorSpace), fogDawn: new THREE.Color().setRGB(0.12, 0.10, 0.105, THREE.LinearSRGBColorSpace),
+    fogBase, fogFlash: new THREE.Color().setRGB(0.26, 0.31, 0.46, THREE.LinearSRGBColorSpace), fogDawn: new THREE.Color().setRGB(0.085, 0.07, 0.09, THREE.LinearSRGBColorSpace),
     onUpdate: (fn) => { updaters.push(fn); return fn; },
     waveH: (x, z) => waveHeight(x, z, ctx.time),
   };
@@ -104,6 +104,8 @@ async function main() {
   scene.add(hemi);
   const hemiOut = new THREE.Color(0x46627f), hemiOutGround = new THREE.Color(0x14110e);
   const hemiIn = new THREE.Color(0x9a6f4a), hemiInGround = new THREE.Color(0x3a2616);
+  const hemiDawn = new THREE.Color(0x9fb2d6), hemiDawnGround = new THREE.Color(0x6a4a36); // clearing sky above, warm earth bounce below
+  const hemiSkyNow = new THREE.Color(), hemiGroundNow = new THREE.Color();
   // moonlight through the cloud deck: cool, strong enough to model rock and tower, and (on High) shadowed so it
   // cannot leak into the rooms. The shadow map never changes, so it is rendered once.
   const moon = new THREE.DirectionalLight(0x93a9d8, 0.5);
@@ -265,16 +267,19 @@ async function main() {
     outK += ((player.indoor ? 0 : 1) - outK) * Math.min(1, dt * 2.5);
     ctx.outK = outK;
     // indoors the ambient is warm bounce light from the lamps rather than cold sky
-    hemi.color.lerpColors(hemiIn, hemiOut, outK); hemi.groundColor.lerpColors(hemiInGround, hemiOutGround, outK);
-    hemi.intensity = (0.5 + weather.flash * 1.5) * outK + (look.ambientIn + weather.flash * 0.35) * (1 - outK) + weather.calm * 0.6;
+    const dawn = weather.sun.glow;
+    hemiSkyNow.copy(hemiOut).lerp(hemiDawn, dawn); hemiGroundNow.copy(hemiOutGround).lerp(hemiDawnGround, dawn);
+    hemi.color.lerpColors(hemiIn, hemiSkyNow, outK); hemi.groundColor.lerpColors(hemiInGround, hemiGroundNow, outK);
+    hemi.intensity = (0.5 + weather.flash * 1.5) * outK + (look.ambientIn + weather.flash * 0.35) * (1 - outK) + dawn * 0.6;
     renderer.toneMappingExposure = 1.2 + look.exposureIn * (1 - outK); // the eye opens up a little indoors
-    moon.intensity = (0.10 + 0.75 * weather.moonVis) * (quality.shadows ? 1 : 0.08 + 0.92 * outK) + weather.calm * 0.4;
+    // the moon pales as the sun takes over (the sun is the weather module's light); what is left is cool sky fill for the shadow side
+    moon.intensity = (0.10 + 0.75 * weather.moonVis) * (quality.shadows ? 1 : 0.08 + 0.92 * outK) * (1 - 0.6 * smoothstep(0.3, 0.8, weather.calm)) + weather.calm * 0.4;
     rig.update(dt); // lend real lights (two with shadows) to the lamps that matter most
     motes.update(t, outK);
 
     rainWet.value = 1 - weather.calm * 0.85;
     // wet lens outside
-    ctx.post.wet = player.indoor ? Math.max(0, ctx.post.wet - dt * 0.35) : Math.min(1, ctx.post.wet + dt * 0.2 * (1 - weather.calm));
+    ctx.post.wet = player.indoor ? Math.max(0, ctx.post.wet - dt * 0.35) : Math.min(1, Math.max(0, ctx.post.wet + dt * (0.2 * (1 - weather.calm) - 0.05 * weather.calm)));
     post.u.uWet.value = Math.min(1.6, ctx.post.wet) * 0.55;
     post.u.uTime.value = t;
 
