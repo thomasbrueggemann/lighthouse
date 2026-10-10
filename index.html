@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Skerryhead Light</title>
+  <meta name="description" content="A stormy night as the keeper of a remote lighthouse. Keep the light burning, repair the tower, uncover its secrets.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IM+Fell+English:ital@0;1&family=IM+Fell+English+SC&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <script type="importmap">
+    { "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+    } }
+  </script>
+</head>
+<body>
+  <div id="app"></div>
+
+  <div id="loading">
+    <h1>Skerryhead Light</h1>
+    <div class="bar"><div id="loadfill"></div></div>
+    <p id="loadmsg">Preparing the storm…</p>
+  </div>
+
+  <div id="menu" class="hidden">
+    <div class="menu-inner">
+      <h1>Skerryhead Light</h1>
+      <p class="sub">A Keeper's Night</p>
+      <p class="intro">
+        October, the north-west coast. A full gale is coming in off the Atlantic and the relief boat could not land.
+        You are alone on the rock with an unlit lamp, a broken window, a cold stove, and a tower older than anyone remembers.
+        Keep the light. Whatever you do, do not let it go dark.
+      </p>
+      <button id="begin">Take up the watch</button>
+      <div class="controls">
+        <div><kbd>W A S D</kbd> walk</div><div><kbd>Shift</kbd> hurry</div>
+        <div><kbd>Mouse</kbd> look</div><div><kbd>E</kbd> / <kbd>Click</kbd> interact (hold for tasks)</div>
+        <div><kbd>F</kbd> hand lantern</div><div><kbd>J</kbd> relics journal</div>
+        <div><kbd>Space</kbd> jump</div><div><kbd>Esc</kbd> pause</div>
+      </div>
+      <div class="settings">
+        <label>Quality
+          <select id="quality">
+            <option value="high">High (shadows, bloom)</option>
+            <option value="medium">Medium (bloom)</option>
+            <option value="low">Low</option>
+          </select>
+        </label>
+        <label>Mouse <input id="sens" type="range" min="0.3" max="2.5" step="0.05"></label>
+      </div>
+      <p class="hint">Best with headphones. Keyboard and mouse required.</p>
+    </div>
+  </div>
+
+  <div id="hud" class="hidden">
+    <div id="crosshair"></div>
+    <div id="prompt"><span id="promptText"></span><div id="holdbar"><div id="holdfill"></div></div><kbd class="ekey">E</kbd></div>
+    <div id="objectives"><h3>The Watch</h3><ul id="tasks"></ul></div>
+    <div id="status"></div>
+    <div id="inventory"></div>
+    <div id="relics">Relics <span id="treasureCount">0 / 8</span> <kbd>J</kbd></div>
+    <div id="toasts"></div>
+    <div id="location"></div>
+    <div id="subtitle"></div>
+  </div>
+
+  <div id="pause" class="hidden"><div><h2>Paused</h2><p>Click to return to the watch</p></div></div>
+
+  <div id="note" class="hidden"><div class="paper"><div id="noteBody"></div><button class="close">Close <kbd>Enter</kbd></button></div></div>
+
+  <div id="journal" class="hidden"><div class="paper wide"><h2>Relics of Elias Marrow</h2><div id="journalBody"></div><p class="hint">Click or press <kbd>J</kbd> to close</p></div></div>
+
+  <div id="ending" class="hidden"><div class="menu-inner"><h1>Dawn</h1><p id="endStats"></p><button id="continue">Keep exploring</button></div></div>
+
+  <div id="fade"></div>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
