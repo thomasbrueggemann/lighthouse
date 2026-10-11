@@ -34,6 +34,7 @@ All paths are relative, so it works from a sub-path. The `.nojekyll` file stops 
 | E / left click | interact (hold for tasks with a progress bar) |
 | F | raise or lower the hand lantern |
 | J / Tab | relics journal |
+| C or Ctrl (hold) | duck: a lower, slimmer body that squeezes through tight gaps |
 | Space | jump |
 | Esc | pause |
 

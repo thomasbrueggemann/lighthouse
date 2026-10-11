@@ -79,11 +79,11 @@ export function buildBedroom(X) {
     let hinted = false, lastCreak = 0;
     ctx.onUpdate((dt, t) => {
       const pp = ctx.player.pos;
-      if (Math.abs(pp.y - y) < 0.3 && Math.hypot(pp.x - p.x, pp.z - p.z) < 0.55 && !S.floorboardPried && t - lastCreak > 1.6) {
+      if (Math.abs(pp.y - y) < 0.3 && Math.hypot(pp.x - p.x, pp.z - p.z) < 0.9 && !S.floorboardPried && t - lastCreak > 1.6) {
         lastCreak = t; audio.creak(0.7);
         if (!hinted) { hinted = true; game.toast('The board under your boot gives a hollow creak.', 3); }
       }
     });
-    interact(o, { range: 2.2, prompt: () => S.floorboardPried ? null : hinted ? 'Lift the creaking floorboard' : null, hold: 1.2, action: () => { S.floorboardPried = true; pl.position.set(0.3, 0.05, 0.25); pl.rotation.set(0, 0.5, 0.1); hole.visible = true; audio.creak(0.8); setTimeout(() => game.findTreasure('watch'), 400); } });
+    interact(o, { assist: true, range: 2.4, prompt: () => S.floorboardPried ? null : hinted ? 'Lift the creaking floorboard' : null, hold: 1.2, action: () => { S.floorboardPried = true; pl.position.set(0.3, 0.05, 0.25); pl.rotation.set(0, 0.5, 0.1); hole.visible = true; audio.creak(0.8); setTimeout(() => game.findTreasure('watch'), 400); } });
   }
 }

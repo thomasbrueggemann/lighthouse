@@ -83,7 +83,7 @@ export function buildInterior(ctx) {
       const st = new THREE.Mesh(boxGeo(0.42, 0.26, 0.12, 0.6), M.cellarRock); st.position.z = 0.04; o.add(st);
       const cav = new THREE.Mesh(boxGeo(0.4, 0.24, 0.02, 0.6), M.black); cav.position.z = -0.01; cav.visible = false; o.add(cav);
       let pulled = false;
-      interact(o, { range: 2.2, prompt: () => pulled ? null : 'One stone stands proud of the others. Pull it free', hold: 1.6, onHold: () => { if (Math.random() < 0.15) audio.stoneScrape(); }, action: () => { pulled = true; st.position.set(0.1, -1.2, 0.5); st.rotation.set(0.6, 0.3, 0.2); cav.visible = true; audio.thud(); setTimeout(() => game.findTreasure('sovereigns'), 500); } });
+      interact(o, { assist: true, range: 2.2, prompt: () => pulled ? null : 'One stone stands proud of the others. Pull it free', hold: 1.6, onHold: () => { if (Math.random() < 0.15) audio.stoneScrape(); }, action: () => { pulled = true; st.position.set(0.1, -1.2, 0.5); st.rotation.set(0.6, 0.3, 0.2); cav.visible = true; audio.thud(); setTimeout(() => game.findTreasure('sovereigns'), 500); } });
     }
     // boards nailed across the tunnel
     {
@@ -127,6 +127,7 @@ export function buildInterior(ctx) {
       col.addBox(x, z, 0.95, 0.6, ry, y - 1, y + 0.6);
       let open = false, taken = false;
       interact(o, {
+        assist: true,
         prompt: () => !open ? 'Open the old sea chest' : !taken ? 'Take the brass spyglass' : null,
         action: () => {
           if (!open) { open = true; audio.creak(0.7); glass.visible = true; const t0 = ctx.time; const u = ctx.onUpdate(() => { lid.rotation.x = -Math.min(1.9, (ctx.time - t0) * 2.5); }); }
@@ -141,7 +142,7 @@ export function buildInterior(ctx) {
       col.addCircle(x, z, 0.6, y - 1, y + 0.7);
       const o = group(x, y + 0.62, z, 0.4);
       const b = new Builder(); b.box(0.22, 0.05, 0.3, M.leather, 0, 0.025, 0); b.box(0.2, 0.04, 0.28, M.candle, 0.01, 0.03, 0); b.build(o);
-      interact(o, { prompt: () => game.treasures.has('journal') ? null : 'A water-stained journal', action: () => { o.visible = false; game.findTreasure('journal'); } });
+      interact(o, { assist: true, prompt: () => game.treasures.has('journal') ? null : 'A water-stained journal', action: () => { o.visible = false; game.findTreasure('journal'); } });
       B.add(new THREE.SphereGeometry(0.11, 12, 10), M.candle, x + 0.55, y + 0.1, z + 0.45, 0, 0, 0, 1, 0.9, 1.15);
       B.add(new THREE.SphereGeometry(0.06, 8, 6), M.black, x + 0.5, y + 0.12, z + 0.53);
       B.add(new THREE.SphereGeometry(0.06, 8, 6), M.black, x + 0.6, y + 0.12, z + 0.53);
@@ -223,7 +224,7 @@ export function buildInterior(ctx) {
       const p = polar(5.45, A(122), LANTERN_Y);
       const o = group(p.x, p.y, p.z, 0.6);
       const b = new Builder(); b.box(0.14, 0.05, 0.1, M.tin, 0, 0.025, 0); b.build(o);
-      interact(o, { prompt: () => game.treasures.has('compass') ? null : 'A small tin, wedged against the railing', action: () => { o.visible = false; game.findTreasure('compass'); } });
+      interact(o, { assist: true, range: 3.0, prompt: () => game.treasures.has('compass') ? null : 'A small tin, wedged against the railing', action: () => { o.visible = false; game.findTreasure('compass'); } });
     }
   }
 
@@ -307,7 +308,7 @@ export function buildInterior(ctx) {
   {
     const boat = ctx.boat;
     const tin = new THREE.Mesh(boxGeo(0.16, 0.06, 0.1), M.tin); tin.position.set(0.2, -0.3, -0.6); boat.add(tin);
-    interact(tin, { range: 2.6, prompt: () => game.treasures.has('pearls') ? null : 'Something glints under the thwart', action: () => { tin.visible = false; game.findTreasure('pearls'); } });
+    interact(tin, { assist: true, range: 3.2, prompt: () => game.treasures.has('pearls') ? null : 'Something glints under the thwart', action: () => { tin.visible = false; game.findTreasure('pearls'); } });
     ctx.onUpdate((dt, t) => {
       const b = boat.position; const h = ctx.waveH(b.x, b.z);
       const hf = ctx.waveH(b.x, b.z + 1.5), hs = ctx.waveH(b.x + 0.6, b.z);
@@ -318,7 +319,7 @@ export function buildInterior(ctx) {
     const bx = 3.7, bz = 26.2, by = terrainHeight(bx, bz);
     const o = group(bx, by + 0.06, bz, 0.8);
     const b = new Builder(); b.add(lathe([[0.001, 0], [0.06, 0], [0.065, 0.02], [0.065, 0.2], [0.03, 0.26], [0.016, 0.29], [0.016, 0.33], [0.001, 0.33]], 12), M.glassBottle, 0, 0.06, 0, 0, 0, Math.PI / 2 - 0.2); b.build(o);
-    interact(o, { range: 2.2, prompt: () => game.treasures.has('message') ? null : 'A bottle, wedged between the rocks', action: () => { o.visible = false; game.findTreasure('message'); } });
+    interact(o, { assist: true, range: 2.8, prompt: () => game.treasures.has('message') ? null : 'A bottle, wedged between the rocks', action: () => { o.visible = false; game.findTreasure('message'); } });
   }
 
   B.build(g, { name: 'interior-static' });

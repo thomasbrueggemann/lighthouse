@@ -24,7 +24,7 @@ export function buildStudy(X) {
     const slideDir = new THREE.Vector3(1, 0, 0).applyAxisAngle(new THREE.Vector3(0, 1, 0), faceIn(a)).multiplyScalar(-1);   // toward lower angles
     let t0 = null;
     interact(redBook, {
-      range: 2.2, prompt: () => S.secretOpen ? null : 'One red book sits a little proud. Pull it',
+      assist: true, range: 2.4, prompt: () => S.secretOpen ? null : 'One red book sits a little proud. Pull it',
       action: () => {
         S.secretOpen = true; redBook.rotation.x = -0.4; audio.click(); setTimeout(() => audio.stoneScrape(), 300);
         t0 = ctx.time; segs.forEach(s => (s.on = false));
@@ -44,7 +44,7 @@ export function buildStudy(X) {
     sb.box(0.22, 0.04, 0.05, M.woodDark, -0.22, 0.08, 0); sb.box(0.004, 0.12, 0.004, M.woodDark, -0.2, 0.15, 0); sb.box(0.004, 0.1, 0.004, M.woodDark, -0.27, 0.14, 0);
     sb.box(0.003, 0.08, 0.05, M.paintWhite, -0.2, 0.15, 0); sb.cyl(0.02, 0.02, 0.03, M.cork, 0.33, 0.09, 0, 8, 0, 0, Math.PI / 2);
     sb.build(sh);
-    interact(sh, { range: 2.4, prompt: () => !S.secretOpen || game.treasures.has('bottleShip') ? null : 'Take the ship in the bottle', action: () => { sh.visible = false; game.findTreasure('bottleShip'); } });
+    interact(sh, { assist: true, range: 2.6, prompt: () => !S.secretOpen || game.treasures.has('bottleShip') ? null : 'Take the ship in the bottle', action: () => { sh.visible = false; game.findTreasure('bottleShip'); } });
   }
 
   // ---- the keeper's desk under the window, with the journal and a lamp

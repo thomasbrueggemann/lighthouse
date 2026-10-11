@@ -1,6 +1,6 @@
 // Procedural storm & interaction audio built from filtered noise and oscillators.
 export class AudioEngine {
-  constructor() { this.ok = false; this.t = 0; this.loops = {}; }
+  constructor() { this.ok = false; this.t = 0; this.loops = {}; this.voices = 0; }
 
   init() {
     if (this.ok) return;
@@ -43,6 +43,19 @@ export class AudioEngine {
     this.rumG = c.createGain(); this.rumG.gain.value = 0.35;
     loop(this.brown).connect(rum).connect(this.rumG).connect(this.master);
     this.ok = true;
+    // The browser suspends a context when the output device changes (headphones, Bluetooth), when the tab is hidden for
+    // a while, or on Safari's 'interrupted' state, and it never wakes up by itself. Keep poking it back to life.
+    c.addEventListener('statechange', () => this.wake());
+    for (const ev of ['keydown', 'mousedown', 'pointerdown', 'touchstart']) addEventListener(ev, () => this.wake(), { passive: true });
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) this.wake(); });
+    addEventListener('focus', () => this.wake());
+    document.addEventListener('pointerlockchange', () => this.wake());
+  }
+
+  // bring a suspended context back; safe to call at any time
+  wake() {
+    const c = this.c; if (!c || c.state === 'running' || c.state === 'closed') return;
+    const r = c.resume(); if (r && r.catch) r.catch(() => {});
   }
 
   noiseBuf(type, sec) {
@@ -67,7 +80,7 @@ export class AudioEngine {
 
   // one-shot noise burst through a filter
   burst({ buf = this.white, type = 'bandpass', f = 1000, q = 1, a = 0.005, d = 0.2, g = 0.5, dest = this.master, when = 0, rate = 1, fEnd = null }) {
-    if (!this.ok) return;
+    if (!this.ok || this.voices > 220) return; // a runaway pile of one-shots would starve the audio thread
     const c = this.c, t = c.currentTime + when;
     const s = c.createBufferSource(); s.buffer = buf; s.playbackRate.value = rate;
     const fl = c.createBiquadFilter(); fl.type = type; fl.frequency.setValueAtTime(f, t); fl.Q.value = q;
@@ -75,6 +88,7 @@ export class AudioEngine {
     const gn = c.createGain(); gn.gain.setValueAtTime(0.0001, t); gn.gain.exponentialRampToValueAtTime(g, t + a); gn.gain.exponentialRampToValueAtTime(0.0001, t + a + d);
     s.connect(fl).connect(gn).connect(dest);
     s.loop = true; s.start(t, Math.random() * Math.max(0, buf.duration - 0.5)); s.stop(t + a + d + 0.05);
+    this.voices++; s.onended = () => { this.voices--; s.disconnect(); fl.disconnect(); gn.disconnect(); };
   }
   tone({ f = 440, type = 'sine', a = 0.01, d = 0.3, g = 0.2, dest = this.master, when = 0, fEnd = null }) {
     if (!this.ok) return;
@@ -89,6 +103,8 @@ export class AudioEngine {
     if (!this.ok) return;
     this.t += dt;
     const c = this.c, now = c.currentTime;
+    if (c.state !== 'running' && (this.wakeT = (this.wakeT || 0) + dt) > 1) { this.wakeT = 0; this.wake(); }
+    if (!(isFinite(s.pos.x + s.pos.y + s.pos.z + s.fwd.x + s.fwd.y + s.fwd.z))) return; // a NaN would throw inside the audio params
     const L = c.listener, p = s.pos, f = s.fwd;
     if (L.positionX) {
       L.positionX.setTargetAtTime(p.x, now, 0.05); L.positionY.setTargetAtTime(p.y, now, 0.05); L.positionZ.setTargetAtTime(p.z, now, 0.05);

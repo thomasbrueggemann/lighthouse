@@ -3,7 +3,9 @@ import { R_IN, CELLAR_Y, LANTERN_Y, R_GLASS, SHED, FLOORS, CAVE, floorIndexAt, c
 import { terrainHeight } from './island.js';
 import { cylGeo, Builder } from './geom.js';
 
-const RADIUS = 0.3, HEIGHT = 1.72, EYE = 1.62, STEP = 0.5;
+const RADIUS = 0.25, HEIGHT = 1.72, EYE = 1.62, STEP = 0.5;
+// ducking: a slimmer, lower body that fits between furniture and the stair rail
+const DUCK_RADIUS = 0.16, DUCK_HEIGHT = 1.05, DUCK_EYE = 1.0;
 
 export class Player {
   constructor(ctx, camera) {
@@ -18,6 +20,7 @@ export class Player {
     this.indoor = true; this.underground = false;
     this.knockV = new THREE.Vector2();
     this.enabled = false;
+    this.duck = 0; // 0 standing .. 1 fully crouched
     addEventListener('keydown', (e) => { this.keys[e.code] = true; if (e.code === 'KeyF' && this.enabled) this.toggleLantern(); });
     addEventListener('keyup', (e) => { this.keys[e.code] = false; });
     addEventListener('mousemove', (e) => {
@@ -81,6 +84,14 @@ export class Player {
     this.zone = this.underground ? (p.z < -6 ? 'cave' : 'cellar') : inTower ? FLOORS[floorIndexAt(p.y)].id : inLantern ? 'lantern' : inShed ? 'shed' : p.y > LANTERN_Y - 0.5 ? 'gallery' : 'outside';
   }
 
+  // would standing up put your head into something (a low beam, a shelf, a stair above)?
+  blockedAbove() {
+    const p = this.pos, probe = this._probe || (this._probe = new THREE.Vector3());
+    probe.copy(p);
+    this.ctx.col.resolve(probe, RADIUS, HEIGHT);
+    return Math.hypot(probe.x - p.x, probe.z - p.z) > 0.04;
+  }
+
   teleport(p, yaw) { this.pos.copy(p); this.vel.set(0, 0, 0); if (yaw !== undefined) this.yaw = yaw; this.camY = p.y + EYE; }
   knock(vx, vz) { this.knockV.set(vx, vz); }
 
@@ -102,15 +113,24 @@ export class Player {
     const len = Math.hypot(fx, fz) || 1;
     fx /= len; fz /= len;
     const heavy = ctx.game.has('oilcan');
-    const run = (k.ShiftLeft || k.ShiftRight) && !heavy;
-    const speed = (run ? 4.6 : 2.6) * (heavy ? 0.8 : 1);
+    // crouch (hold C or Ctrl); you stay low while something is overhead
+    const want = this.enabled && (k.KeyC || k.ControlLeft || k.ControlRight);
+    if (!want && this.duck > 0 && this.blockedAbove()) this.duckHeld = true; else this.duckHeld = false;
+    const duckTo = want || this.duckHeld ? 1 : 0;
+    this.duck += (duckTo - this.duck) * Math.min(1, dt * 12);
+    if (Math.abs(duckTo - this.duck) < 0.01) this.duck = duckTo;
+    const radius = RADIUS + (DUCK_RADIUS - RADIUS) * this.duck, height = HEIGHT + (DUCK_HEIGHT - HEIGHT) * this.duck;
+    const eye = EYE + (DUCK_EYE - EYE) * this.duck;
+    this.eye = eye;
+    const run = (k.ShiftLeft || k.ShiftRight) && !heavy && this.duck < 0.3;
+    const speed = (run ? 4.6 : 2.6) * (heavy ? 0.8 : 1) * (1 - this.duck * 0.5);
     const sy = Math.sin(this.yaw), cy = Math.cos(this.yaw);
     const wx = (-sy * fz + cy * fx) * speed, wz = (-cy * fz - sy * fx) * speed;
     const acc = this.onGround ? 10 : 2;
     this.vel.x += (wx - this.vel.x) * Math.min(1, acc * dt);
     this.vel.z += (wz - this.vel.z) * Math.min(1, acc * dt);
     if (this.knockV.lengthSq() > 0.01) { this.vel.x += this.knockV.x; this.vel.z += this.knockV.y; this.knockV.set(0, 0); }
-    if (this.enabled && k.Space && this.onGround) { this.vel.y = 4.2; this.onGround = false; }
+    if (this.enabled && k.Space && this.onGround && this.duck < 0.3) { this.vel.y = 4.2; this.onGround = false; }
     this.vel.y -= 18 * dt;
 
     const dist = Math.hypot(this.vel.x, this.vel.z) * dt;
@@ -121,7 +141,7 @@ export class Player {
     for (let i = 0; i < n; i++) {
       const ox = p.x, oz = p.z, oy = p.y;
       p.x += this.vel.x * sdt; p.z += this.vel.z * sdt;
-      col.resolve(p, RADIUS, HEIGHT);
+      col.resolve(p, radius, height);
       let g = col.ground(p.x, p.z, p.y + STEP);
       // steep rock: don't climb cliffs
       if (g.terrain && g.y > oy + 0.02) {
@@ -146,7 +166,7 @@ export class Player {
       const stride = run ? 0.85 : 0.68;
       if (this.stepAcc > stride) { this.stepAcc = 0; ctx.audio.footstep(this.surface, run); }
     }
-    const targetY = p.y + EYE;
+    const targetY = p.y + eye;
     this.camY += (targetY - this.camY) * Math.min(1, dt * (targetY > this.camY ? 14 : 20));
     if (Math.abs(targetY - this.camY) > 1.2) this.camY = targetY;
     const bobA = this.onGround ? Math.min(1, hs / 3) : 0;

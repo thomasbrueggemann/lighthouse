@@ -40,7 +40,7 @@ export class UI {
   setJournal(found) {
     this.el.journalBody.innerHTML = Object.entries(TREASURES).map(([id, t]) => found.has(id)
       ? `<div class="relic found"><h3>${t.name}</h3><p>${t.text}</p><small>${t.where}</small></div>`
-      : `<div class="relic"><h3>— undiscovered —</h3></div>`).join('');
+      : `<div class="relic"><h3>— undiscovered —</h3><small>${t.hint}</small></div>`).join('');
   }
   location(name) {
     if (name === this.lastLoc) return;

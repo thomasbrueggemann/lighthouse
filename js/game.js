@@ -16,34 +16,42 @@ export const ITEMS = {
 
 export const TREASURES = {
   sovereigns: {
+    hint: 'The cellar wall keeps a promise to the boy. Look for a stone that stands proud.',
     name: 'A purse of gold sovereigns', where: 'Behind a loose stone in the cellar',
     text: 'Twelve gold sovereigns, Victoria\'s young head on every one, wrapped in oilcloth. A slip of paper: <em>"For the boy, should I not come back from the Sound. — E.M."</em>',
   },
   spyglass: {
+    hint: 'Smugglers kept a sea chest in the cave under the rock. The tunnel is boarded up from the cellar.',
     name: "Captain Harlan's brass spyglass", where: 'In the smugglers\' chest in the sea cave',
     text: 'Engraved along the draw-tube: <em>"Capt. J. Harlan — Brig MARIANNE — Bristol 1879."</em> The Marianne went down on Skerry Reef in the winter of 1887. No bodies were ever recovered. No cargo, either.',
   },
   journal: {
+    hint: 'A confession lies on a ledge in the cave, near what is left of its writer.',
     name: 'Journal of Elias Marrow, 1887', where: 'On a rock ledge in the sea cave',
     text: '<em>"Nov. 3rd — Harlan rowed in again tonight. The casks go down the tunnel to the cave and the Board none the wiser. I tell myself it is only brandy. Nov. 19th — Gale from the NW. I was to show two lights for the Marianne. I did not. God forgive me, I put the lamp out."</em>',
   },
   watch: {
+    hint: 'Walk the bedroom floor and listen for a board that creaks underfoot.',
     name: 'A silver pocket watch', where: 'Under a loose floorboard in the bedroom',
     text: 'Stopped at twenty past two. Inside the case: <em>"To Elias, from your Mary. Keep the light."</em> A lock of fair hair is pressed behind the glass.',
   },
   bottleShip: {
+    hint: 'One red book sits proud on a study shelf. Pull it, then look in the wall behind.',
     name: 'The Marianne, in a bottle', where: 'In the hidden alcove behind the study bookcase',
     text: 'A perfect little brig, every line rigged with thread. Tucked beneath the stand, a note in Marrow\'s hand: <em>"I built her as she was, before I drowned her. The rest of Harlan\'s gold lies where the sea can watch it."</em>',
   },
   compass: {
+    hint: 'Go all the way round the gallery outside the lantern. Something is wedged by the railing.',
     name: 'An engraved brass compass', where: 'Wedged beneath the gallery railing',
     text: 'The needle does not point north. It swings, slowly and stubbornly, toward the reef. On the lid: <em>"She will lead you home."</em>',
   },
   pearls: {
+    hint: 'The rowing boat at the jetty has something under its seat.',
     name: 'A rope of black pearls', where: 'Under the thwart of the moored rowing boat',
     text: 'Forty black pearls on a rotten silk thread, in a tin marked <em>MARIANNE — PERSONAL EFFECTS</em>. Someone has been out to the wreck. Recently.',
   },
   message: {
+    hint: 'The sea leaves its letters on the rocks of the landing, south of the tower.',
     name: 'A message in a bottle', where: 'Washed into the rocks of the landing shelf',
     text: 'The ink has run but the words survive: <em>"To whoever keeps Skerryhead now — the cave remembers. Count the stones. Light the lamp. Whatever you do, do not let it go dark."</em>',
   },

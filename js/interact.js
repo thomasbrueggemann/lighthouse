@@ -39,6 +39,26 @@ export class Interaction {
         break;
       }
     }
+    // aim assist for small finds (a bottle, a tin, a watch): if the crosshair is merely near one and nothing solid is in
+    // the way, it still counts
+    if (!rec && enabled) {
+      const cp = this.camera.getWorldPosition(this._cp || (this._cp = new THREE.Vector3())), dir = this.camera.getWorldDirection(this._cd || (this._cd = new THREE.Vector3()));
+      let best = 0.2;
+      for (const r of this.items) {
+        if (!r.assist || !visibleDeep(r.obj)) continue;
+        const c = this._cc || (this._cc = new THREE.Vector3());
+        this._box = this._box || new THREE.Box3(); this._box.setFromObject(r.obj); this._box.getCenter(c);
+        c.sub(cp); const d = c.length();
+        if (d > r.range || d < 0.05) continue;
+        const ang = Math.acos(Math.min(1, c.dot(dir) / d));
+        if (ang >= best) continue;
+        const p = r.prompt(); if (!p) continue;
+        this.ray.set(cp, c.normalize());
+        const block = this.ray.intersectObjects(this.ctx.occluders, true).find(h => visibleDeep(h.object));
+        if (block && block.distance < d - 0.35) continue;
+        best = ang; rec = r; prompt = p;
+      }
+    }
     if (rec !== this.target) { this.target = rec; this.progress = 0; }
     ui.setPrompt(prompt, rec && rec.hold ? this.progress : null);
     if (rec && this.down && !this.consumed) {
