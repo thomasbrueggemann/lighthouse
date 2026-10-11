@@ -335,7 +335,7 @@ function buildLantern(ctx, B, g) {
       gl.position.set(p.x, (yP + GLASS_TOP) / 2, p.z); gl.rotation.y = ry; g.add(gl);
       B.box(sideW, 0.06, 0.08, M.ironRed, p.x, yP + 1.35, p.z, 0, ry, 0);
       if (DIRTY_PANES.includes(i)) {
-        const sm = new THREE.MeshStandardMaterial({ color: 0xd8d4c8, roughness: 1, alphaMap: ctx.T.salt, transparent: true, opacity: 0.95, depthWrite: false });
+        const sm = new THREE.MeshStandardMaterial({ color: 0xd8d4c8, roughness: 1, alphaMap: ctx.T.salt, transparent: true, opacity: 0.95, depthWrite: false, side: THREE.DoubleSide });
         const salt = new THREE.Mesh(new THREE.PlaneGeometry(sideW - 0.08, GLASS_TOP - yP - 0.06), sm);
         const ps = polar(apo + 0.03, ac);
         salt.position.set(ps.x, (yP + GLASS_TOP) / 2, ps.z); salt.rotation.y = ry; g.add(salt);
@@ -381,7 +381,7 @@ function buildLantern(ctx, B, g) {
   col.addRing(0, 0, RG - 0.02, y0 - 0.1, y0 + 1.5, 64);
 
   // lens pedestal & clockwork-driven optic
-  B.add(lathe([[0.75, 0], [0.75, 0.08], [0.45, 0.2], [0.38, 0.75], [0.55, 0.9], [0.6, 0.95], [0.001, 0.95]], 24), M.ironGreen, 0, y0, 0);
+  B.add(lathe([[0.75, 0], [0.75, 0.08], [0.45, 0.2], [0.38, 0.7], [0.55, 0.84], [0.6, 0.88], [0.001, 0.88]], 24), M.ironGreen, 0, y0, 0);
   col.addCircle(0, 0, 0.78, y0 - 0.1, y0 + 3);
   const lens = new THREE.Group(); lens.position.set(0, LENS_Y, 0); g.add(lens);
   const LB = new Builder();

@@ -179,10 +179,10 @@ export function buildInterior(ctx) {
     interact(T.lanternDoor.hinge, { prompt: () => T.lanternDoor.open ? 'Close the gallery door' : 'Open the door to the gallery', action: () => { const d = T.lanternDoor; d.open = !d.open; d.seg.on = !d.open; audio.door(); } });
     for (const pane of T.panes) {
       interact(pane.mesh, {
-        range: 2.0,
+        range: 2.8,
         prompt: () => {
           if (pane.dirt <= 0.02) return null;
-          const p = ctx.player.pos; if (Math.hypot(p.x, p.z) < R_GLASS) return 'The salt is crusted on the outside of the glass';
+          const p = ctx.player.pos; if (Math.hypot(p.x, p.z) < R_GLASS) return 'The salt is on the outside of the glass: step out onto the gallery to scrub it';
           return game.has('rag') ? 'Scrub the salt off the glass' : 'Salt-crusted glass. You need a rag.';
         },
         hold: 2.5, onHold: (dt) => { if (game.has('rag') && Math.hypot(ctx.player.pos.x, ctx.player.pos.z) > R_GLASS) { pane.dirt = Math.max(0.05, pane.dirt - dt / 2.5); pane.mat.opacity = pane.dirt * 0.95; if (Math.random() < 0.2) audio.wipe(); } },

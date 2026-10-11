@@ -51,7 +51,7 @@ export function buildKitchen(X) {
     B.cbox(1.18, 0.05, 0.3, M.paintTeal, 0, 2.02, -0.09, 0, 0, 0, 0.7, null, 0.006);
     for (const yy of [1.25, 1.62]) {
       B.cbox(1.1, 0.025, 0.24, M.paintTeal, 0, yy, -0.1, 0, 0, 0, 0.7, null, 0.004);
-      for (let k = 0; k < 5; k++) B.cyl(0.11, 0.11, 0.015, k % 2 ? M.ceramicBlue : M.ceramic, -0.4 + k * 0.2, yy + 0.12, -0.17, 20, Math.PI / 2 - 0.15);
+      for (let k = 0; k < 5; k++) B.cyl(0.085, 0.085, 0.015, k % 2 ? M.ceramicBlue : M.ceramic, -0.4 + k * 0.2, yy + 0.108, -0.17, 20, Math.PI / 2 - 0.15);
     }
     for (let k = 0; k < 4; k++) { B.cyl(0.04, 0.035, 0.09, M.ceramic, -0.4 + k * 0.12, 0.93, 0.05, 10); B.add(new THREE.TorusGeometry(0.025, 0.006, 4, 10), M.ceramic, -0.4 + k * 0.12 + 0.045, 0.93, 0.05); }
   }, { name: 'dresser' });
