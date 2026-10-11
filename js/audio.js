@@ -156,13 +156,45 @@ export class AudioEngine {
     this.burst({ buf: this.white, type: 'highpass', f: 2000, a: 0.08, d: 1.0, g: 0.4 * k, dest: pan, when: 0.1 });
     setTimeout(() => pan.disconnect(), 4000);
   }
-  footstep(surface, run) {
+  // outdoors the rock and stone are streaming wet: every step is a splash
+  footstep(surface, run, indoor = true) {
+    if (!this.ok) return;
     const g = run ? 0.5 : 0.35;
-    if (surface === 'wood') { this.burst({ buf: this.brown, type: 'lowpass', f: 380, a: 0.004, d: 0.12, g: g * 1.4 }); this.burst({ type: 'bandpass', f: 1600 + Math.random() * 600, q: 3, a: 0.002, d: 0.04, g: g * 0.15 }); if (Math.random() < 0.08) this.creak(0.15); }
-    else if (surface === 'metal') { this.burst({ type: 'bandpass', f: 2400 + Math.random() * 400, q: 12, a: 0.002, d: 0.2, g: g * 0.5 }); this.burst({ buf: this.brown, type: 'lowpass', f: 300, a: 0.003, d: 0.08, g }); }
-    else if (surface === 'water') { this.burst({ buf: this.pink, type: 'bandpass', f: 900, q: 0.8, a: 0.02, d: 0.35, g: g * 1.2 }); }
+    if (!indoor && (surface === 'stone' || surface === 'rock' || surface === 'water')) return this.splash(g, surface === 'water');
+    if (surface === 'wood') {
+      // a heavy heel thud, a knock of the board, and a creak under the weight on every single step
+      this.burst({ buf: this.brown, type: 'lowpass', f: 380, a: 0.004, d: 0.14, g: g * 1.5 });
+      this.burst({ type: 'bandpass', f: 1200 + Math.random() * 700, q: 3, a: 0.002, d: 0.05, g: g * 0.2 });
+      this.stepCreak(g * (0.8 + Math.random() * 0.5));
+    }
+    else if (surface === 'metal') {
+      // a boot on an iron grating: a dull clank, a ringing overtone, and a little rattle
+      this.burst({ type: 'bandpass', f: 2400 + Math.random() * 400, q: 12, a: 0.002, d: 0.22, g: g * 0.55 });
+      this.burst({ buf: this.brown, type: 'lowpass', f: 300, a: 0.003, d: 0.08, g });
+      this.tone({ f: 520 + Math.random() * 140, type: 'triangle', a: 0.002, d: 0.35, g: 0.03 });
+      this.burst({ type: 'highpass', f: 5000, a: 0.002, d: 0.05, g: g * 0.15, when: 0.04 });
+    }
+    else if (surface === 'water') this.splash(g, true);
     else if (surface === 'stone') { this.burst({ type: 'bandpass', f: 2200 + Math.random() * 800, q: 2, a: 0.002, d: 0.06, g: g * 0.4 }); this.burst({ buf: this.brown, type: 'lowpass', f: 250, a: 0.003, d: 0.06, g: g * 0.8 }); }
     else { this.burst({ buf: this.pink, type: 'bandpass', f: 1300 + Math.random() * 500, q: 1.2, a: 0.004, d: 0.12, g: g * 0.6 }); this.burst({ buf: this.brown, type: 'lowpass', f: 220, a: 0.004, d: 0.08, g: g * 0.6 }); }
+  }
+  // a boot coming down in a puddle: a slap, a wash of water and a few flung droplets
+  splash(g, deep) {
+    const w = deep ? 1.3 : 1;
+    this.burst({ buf: this.pink, type: 'bandpass', f: 700 + Math.random() * 300, fEnd: 1800, q: 0.9, a: 0.006, d: 0.22 * w, g: g * 1.5 });
+    this.burst({ buf: this.brown, type: 'lowpass', f: 300, a: 0.004, d: 0.1, g: g * 1.1 });
+    this.burst({ buf: this.white, type: 'highpass', f: 3500, a: 0.01, d: 0.12 * w, g: g * 0.3, when: 0.03 });
+    for (let i = 0; i < 3 + (deep ? 2 : 0); i++) this.tone({ f: 1400 + Math.random() * 1800, fEnd: 2600 + Math.random() * 1500, a: 0.004, d: 0.03 + Math.random() * 0.04, g: 0.025, when: 0.05 + Math.random() * 0.2 });
+  }
+  // the short groan of a floorboard taking weight
+  stepCreak(g = 0.3) {
+    const c = this.c, t = c.currentTime;
+    const o = c.createOscillator(); o.type = 'sawtooth';
+    const f0 = 110 + Math.random() * 160; o.frequency.setValueAtTime(f0, t); o.frequency.linearRampToValueAtTime(f0 * (0.6 + Math.random() * 0.9), t + 0.28);
+    const bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 600 + Math.random() * 600; bp.Q.value = 7;
+    const gn = c.createGain(); gn.gain.setValueAtTime(0.0001, t); gn.gain.exponentialRampToValueAtTime(g * 0.5, t + 0.04); gn.gain.exponentialRampToValueAtTime(0.0001, t + 0.3);
+    const lfo = c.createOscillator(); lfo.frequency.value = 30 + Math.random() * 25; const lg = c.createGain(); lg.gain.value = g * 0.25; lfo.connect(lg).connect(gn.gain);
+    o.connect(bp).connect(gn).connect(this.master); o.start(t); o.stop(t + 0.35); lfo.start(t); lfo.stop(t + 0.35);
   }
   creak(g = 0.3, dest) {
     if (!this.ok) return;

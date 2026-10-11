@@ -164,7 +164,7 @@ export class Player {
       this.bob += hs * dt * 2.4;
       this.stepAcc += hs * dt;
       const stride = run ? 0.85 : 0.68;
-      if (this.stepAcc > stride) { this.stepAcc = 0; ctx.audio.footstep(this.surface, run); }
+      if (this.stepAcc > stride) { this.stepAcc = 0; ctx.audio.footstep(this.surface, run, this.indoor); }
     }
     const targetY = p.y + eye;
     this.camY += (targetY - this.camY) * Math.min(1, dt * (targetY > this.camY ? 14 : 20));

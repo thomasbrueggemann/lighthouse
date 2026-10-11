@@ -189,7 +189,7 @@ export function buildTower(ctx) {
     buildBeams(B, M, LANTERN_Y - 0.3, s4.holeA0, s4.holeA1, s4.r0 - 0.08, s4.r1 + 0.08);
     // gallery deck
     const deck = mesh(annularSector(R_GLASS, R_GALLERY, 0, TAU, LANTERN_Y - 0.3, LANTERN_Y, 64, 1.5).geometry(), M.granite);
-    col.addWalk(deck, 'stone');
+    col.addWalk(deck, 'metal');
     for (let k = 0; k < 32; k++) {
       const a = (k + 0.5) / 32 * TAU, p = polar(5.25, a, LANTERN_Y - 0.75);
       B.box(0.22, 0.5, 1.2, M.granite, p.x, p.y, p.z, 0, faceIn(a), 0, 1);
