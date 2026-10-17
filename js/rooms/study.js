@@ -90,12 +90,13 @@ export function buildStudy(X) {
       action: () => {
         if (!(S.radioCalling && !S.radioAnswered)) { audio.radioBurst(2); game.toast('Nothing but static and the moan of the gale in the aerial.'); return; }
         S.radioAnswered = true; S.shipState = 'approach'; game.refresh();
+        const sh = X.NIGHT.ship;
         game.radio([
-          ['SS Aurora', 'Skerryhead Light, Skerryhead Light, this is the steamer Aurora. Do you read? Over.', 4.5],
-          ['You', 'Aurora, Skerryhead. Reading you. Go ahead.', 3],
-          ['SS Aurora', "We've lost our bearings in this muck and our compass is playing up. We're making for the Sound.", 4.5],
-          ['SS Aurora', "We'll need your light turning bright and your fog signal sounding to clear the reef. Over.", 4.5],
-          ['You', "Understood, Aurora. Keep her well to the south. I'll keep the light.", 3.5],
+          [sh.name, `Skerryhead Light, Skerryhead Light, this is the steamer ${sh.short}. Do you read? Over.`, 4.5],
+          ['You', `${sh.short}, Skerryhead. Reading you. Go ahead.`, 3],
+          [sh.name, `${sh.trouble} We're making for the Sound.`, 4.5],
+          [sh.name, "We'll need your light turning bright and your fog signal sounding to clear the reef. Over.", 4.5],
+          ['You', `Understood, ${sh.short}. Keep her well to the south. I'll keep the light.`, 3.5],
         ]);
       },
     });
@@ -107,7 +108,7 @@ export function buildStudy(X) {
     const o = group(p.x, p.y, p.z, faceIn(A(baroA)));
     const needle = new THREE.Mesh(boxGeo(0.006, 0.12, 0.004), M.black); needle.geometry.translate(0, 0.05, 0); needle.rotation.z = 1.6; o.add(needle);
     const hit = new THREE.Mesh(new THREE.CircleGeometry(0.17, 12), new THREE.MeshBasicMaterial({ visible: false })); o.add(hit);
-    interact(o, { prompt: () => 'Tap the barometer', action: () => { audio.click(); needle.rotation.z = 1.75; setTimeout(() => (needle.rotation.z = 1.85), 150); S.baroRead = true; game.refresh(); game.toast('<b>28.3 inches</b> and still falling. The needle quivers at STORMY.'); } });
+    interact(o, { prompt: () => 'Tap the barometer', action: () => { audio.click(); needle.rotation.z = 1.75; setTimeout(() => (needle.rotation.z = 1.85), 150); S.baroRead = true; game.refresh(); game.toast(`<b>${X.NIGHT.weather.baro} inches</b> and still falling. The needle quivers at STORMY.`); } });
     ctx.onUpdate((dt, t) => { if (!S.baroRead) needle.rotation.z = 1.6 + Math.sin(t * 0.3) * 0.01; });
   }
 

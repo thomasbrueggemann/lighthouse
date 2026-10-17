@@ -61,7 +61,7 @@ export function makeEnv(ctx, B, g) {
       },
       // an object standing on a window sill (idx = which window of this floor)
       sill(idx, draw, dx = 0) {
-        const w = WINDOWS[k][idx]; if (!w) return;
+        const w = WINDOWS[k][idx]; if (!w || w.broken) return;   // nothing stands on a sill the gale has blown in
         const a = w.a * DEG, p = polar(R_IN + 0.2, a, y + w.yb + 0.05);
         B.push(p.x, y + w.yb + 0.05, p.z, faceIn(a)); B.push(dx, 0, 0); draw(w); B.pop(); B.pop();
       },

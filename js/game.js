@@ -3,6 +3,7 @@ import { waveHeight } from './ocean.js';
 import { boxGeo, cylGeo, Builder } from './geom.js';
 import { R_IN, CELLAR_Y, LANTERN_Y, SHED, FLOORS, clamp } from './config.js';
 import { terrainHeight } from './island.js';
+import { NIGHT } from './night.js';
 
 export const ITEMS = {
   matches: { name: 'Box of matches', icon: '🔥' },
@@ -73,14 +74,16 @@ export const TASKS = [
   { id: 'stove', text: 'Light the stove in the kitchen', done: (S) => S.stoveLit },
   { id: 'oil', text: 'Fetch paraffin from the oil store outside', done: (S, g) => S.fuelFilled || g.has('oilcan') },
   { id: 'fuel', text: 'Fill the lamp reservoir in the watch room', done: (S) => S.fuelFilled },
-  { id: 'pressure', text: 'Pump up the reservoir pressure', done: (S) => S.pressure > 0.98 || S.lampLit, show: (S) => S.fuelFilled },
+  { id: 'pressure', text: (S) => S.leak ? 'The reservoir is losing pressure: pump it back up!' : 'Pump up the reservoir pressure', done: (S) => S.pressure > 0.98 || (S.lampLit && !S.leak), show: (S) => S.fuelFilled, urgent: (S) => S.leak },
   { id: 'lamp', text: 'Light the lamp in the lantern room', done: (S) => S.lampLit },
   { id: 'wind', text: (S) => S.clockwork <= 0 && S.everWound ? 'The clockwork has run down: rewind it!' : 'Wind the clockwork so the lens turns', done: (S) => S.clockwork > 0, urgent: (S) => S.clockwork <= 0 && S.everWound },
-  { id: 'glass', text: (S) => `Scrub the salt off the lantern glass (${S.glassCleaned}/6)`, done: (S) => S.glassCleaned >= 6 },
-  { id: 'window', text: 'Board up the broken bedroom window', done: (S) => S.windowBoarded },
-  { id: 'foghorn', text: 'Get the fog signal running in the oil store', done: (S) => S.foghornOn },
+  { id: 'glass', text: (S) => `Scrub the salt off the lantern glass (${S.glassCleaned}/${S.glassTotal})`, done: (S) => S.glassCleaned >= S.glassTotal },
+  // tonight's repairs (NIGHT decides which the gale has left)
+  { id: 'window', text: () => `Board up the broken window in the ${NIGHT.broken.room}`, show: () => !!NIGHT.broken, done: (S) => S.windowBoarded },
+  { id: 'foghorn', text: (S) => S.foghornStalled ? 'The fog signal has stalled: restart it!' : NIGHT.repairs.belt ? 'Mend the fog signal in the oil store' : 'Get the fog signal running in the oil store', done: (S) => S.foghornOn, urgent: (S) => S.foghornStalled },
+  { id: 'boat', text: 'Make the rowing boat fast at the jetty', show: () => NIGHT.repairs.boat, done: (S) => S.boatSecured },
   { id: 'radio', text: 'The wireless is calling: answer it in the study', show: (S) => S.radioCalling, done: (S) => S.radioAnswered, urgent: (S) => S.radioCalling && !S.radioAnswered },
-  { id: 'ship', text: 'Guide the SS Aurora safely past the reef', show: (S) => S.radioAnswered, done: (S) => S.shipState === 'passed' },
+  { id: 'ship', text: `Guide the ${NIGHT.ship.name} safely past the reef`, show: (S) => S.radioAnswered, done: (S) => S.shipState === 'passed' },
   { id: 'baro', text: 'Read the barometer in the study', show: (S) => S.shipState === 'passed', done: (S) => S.baroRead },
   { id: 'log', text: "Write the night's entry in the journal", show: (S) => S.shipState === 'passed', done: (S) => S.logWritten },
 ];
@@ -93,7 +96,11 @@ export class Game {
       glassCleaned: 0, windowBoarded: false, beltFitted: false, foghornOn: false, radioCalling: false, radioAnswered: false,
       shipState: 'none', shipProgress: 0, baroRead: false, logWritten: false, rugMoved: false, boardsPried: false, secretOpen: false,
       floorboardPried: false, lampLitAt: 0,
+      glassTotal: NIGHT.dirtyPanes.length, boatSecured: false, leak: false, foghornStalled: false,
     };
+    if (!NIGHT.repairs.belt) this.S.beltFitted = true;   // a good night for the fog signal: it only wants cranking
+    this.incidents = NIGHT.incidents.map(i => ({ ...i }));
+    this.answeredAt = null;
     this.inv = new Map();
     this.treasures = new Set();
     this.time = 0;
@@ -129,11 +136,11 @@ export class Game {
     }));
     this.ui.setTasks(list);
   }
-  beamOK() { const S = this.S; return S.lampLit && S.fuel > 0 && S.clockwork > 0 && S.glassCleaned >= 4; }
+  beamOK() { const S = this.S; return S.lampLit && S.fuel > 0 && S.clockwork > 0 && S.glassTotal - S.glassCleaned <= 2 && !(S.leak && S.pressure < 0.5); }
   beamIntensity() {
     const S = this.S;
     if (!S.lampLit) return 0;
-    return clamp(S.fuel * 6, 0, 1) * (0.3 + 0.7 * S.glassCleaned / 6);
+    return clamp(S.fuel * 6, 0, 1) * (0.3 + 0.7 * S.glassCleaned / S.glassTotal) * (S.leak ? clamp(S.pressure * 1.5, 0.3, 1) : 1);
   }
   radio(lines, i = 0) {
     if (i >= lines.length) return;
@@ -161,8 +168,14 @@ export class Game {
       if (S.clockwork <= 0) { this.toast('The clockwork has run down. <b>The light has stopped turning!</b>', 6); this.refresh(); }
       else if (S.clockwork < 0.12) this.warn('clock', 'The clockwork weight is nearly at the bottom of the tube.', 40);
     }
+    // a weeping pump gland bleeds the pressure away; with too little the mantle goes out
+    if (S.leak && S.fuelFilled) {
+      S.pressure = Math.max(0, S.pressure - dt / 70);
+      if (S.lampLit && S.pressure < 0.25) { S.lampLit = false; this.toast('The mantle dies to a blue flicker and goes out. <b>No pressure in the line!</b>', 6); this.refresh(); }
+      else if (S.pressure < 0.6) this.warn('leak', 'The light is dimming. The reservoir pressure is falling.', 30);
+    }
     // radio call once the light is properly working
-    if (!S.radioCalling && S.lampLit && S.clockwork > 0 && this.time - S.lampLitAt > 25) {
+    if (!S.radioCalling && S.lampLit && S.clockwork > 0 && this.time - S.lampLitAt > NIGHT.callDelay) {
       S.radioCalling = true; this.refresh();
       this.toast('The wireless set in the study crackles into life…', 6);
       ctx.audio.radioCall();
@@ -171,16 +184,25 @@ export class Game {
       this.radioNag = (this.radioNag || 0) + dt;
       if (this.radioNag > 9) { this.radioNag = 0; ctx.audio.radioCall(); }
     }
+    // tonight's mishaps, while the ship is passing
+    if (S.radioAnswered && this.answeredAt === null) this.answeredAt = this.time;
+    if (this.answeredAt !== null && S.shipState !== 'passed') {
+      for (const inc of this.incidents) {
+        if (inc.done || this.time - this.answeredAt < inc.at) continue;
+        if (this.incident(inc.kind)) inc.done = true; else inc.at += 15;   // not possible yet (nothing to foul): try again shortly
+      }
+    }
     // ship
     if (S.shipState === 'approach' || S.shipState === 'waiting') {
       const ok = this.beamOK() && S.foghornOn;
       if (ok) {
-        if (S.shipState === 'waiting') { S.shipState = 'approach'; this.radio([['SS Aurora', 'We have your light again, Skerryhead! Proceeding.', 3.5]]); }
-        S.shipProgress = Math.min(1, S.shipProgress + dt / 150);
+        if (S.shipState === 'waiting') { S.shipState = 'approach'; this.radio([[NIGHT.ship.name, 'We have your light again, Skerryhead! Proceeding.', 3.5]]); }
+        S.shipProgress = Math.min(1, S.shipProgress + dt / NIGHT.ship.passage);
         if (S.shipProgress >= 1) {
           S.shipState = 'passed'; this.refresh();
           ctx.audio.shipHorn();
-          this.radio([['SS Aurora', 'Skerryhead, Aurora. We are clear of the reef and into open water.', 4], ['SS Aurora', 'God bless you, keeper. We owe you our lives. Aurora out.', 4]]);
+          const sh = NIGHT.ship;
+          this.radio([[sh.name, `Skerryhead, ${sh.short}. We are clear of the reef and into open water.`, 4], [sh.name, `God bless you, keeper. We owe you our lives. ${sh.short} out.`, 4]]);
           setTimeout(() => this.toast('The ship is safe. Read the barometer and write up the journal in the study.', 7), 9000);
         }
       } else {
@@ -188,9 +210,9 @@ export class Game {
         if (S.shipState === 'approach' && this.shipWait > 6) {
           S.shipState = 'waiting'; this.shipWait = 0;
           const why = !S.foghornOn ? 'We cannot hear your fog signal!' : !S.lampLit ? 'Your light has gone out!' : S.clockwork <= 0 ? 'Your light is not turning, we cannot read it!' : 'Your light is too dim, man! The glass must be fouled!';
-          this.radio([['SS Aurora', `Skerryhead! ${why} We're heaving to.`, 4]]);
+          this.radio([[NIGHT.ship.name, `Skerryhead! ${why} We're heaving to.`, 4]]);
         }
-        if (S.shipState === 'waiting') this.warn('ship', 'The Aurora is waiting. She needs a turning, bright light <b>and</b> the fog signal.', 30);
+        if (S.shipState === 'waiting') this.warn('ship', `The ${NIGHT.ship.short} is waiting. She needs a turning, bright light <b>and</b> the fog signal.`, 30);
       }
     }
     if (ctx.ship) ctx.ship.update(dt, this.time, S);
@@ -210,6 +232,26 @@ export class Game {
     if (p.y < 0.6 && !ctx.player.underground) this.drown();
     // UI status
     this.ui.setStatus(S, this.beamIntensity());
+  }
+  // one of the night's mishaps; returns false if it cannot happen yet
+  incident(kind) {
+    const S = this.S, ctx = this.ctx;
+    if (kind === 'squall') {
+      const n = ctx.resaltPanes ? ctx.resaltPanes(2) : 0;
+      if (!n) return false;
+      ctx.audio.crash(0, 36, 0, 0.6);
+      this.toast(`A squall drives spray clean over the lantern. <b>${n === 1 ? 'A pane has' : 'Two panes have'} salted over again.</b>`, 6);
+    } else if (kind === 'leak') {
+      if (!S.fuelFilled || !S.lampLit || S.leak) return false;
+      S.leak = true;
+      this.toast('A thin hiss from the watch room: the pump gland is weeping. <b>The reservoir pressure is falling.</b>', 6);
+    } else if (kind === 'stall') {
+      if (!S.foghornOn) return false;
+      S.foghornOn = false; S.foghornStalled = true; ctx.audio.setLoop('engine', false);
+      this.toast('The fog signal falls silent mid-blast. <b>The engine in the oil store has stalled.</b>', 6);
+    }
+    this.refresh();
+    return true;
   }
   drown() {
     const ctx = this.ctx;
@@ -249,14 +291,15 @@ export class Ship {
     lights.add(new THREE.SphereGeometry(0.3, 8, 6), M.greenLight, -1, 9.8, 3.8);
     lights.build(g, { shadows: false });
     this.group = g;
-    this.p0 = new THREE.Vector3(-330, 0, 150);
-    this.p1 = new THREE.Vector3(330, 0, 100);
+    // she comes from the west on some nights and from the east on others
+    this.p0 = new THREE.Vector3(-330 * NIGHT.ship.dir, 0, NIGHT.ship.dir > 0 ? 150 : 100);
+    this.p1 = new THREE.Vector3(330 * NIGHT.ship.dir, 0, NIGHT.ship.dir > 0 ? 100 : 150);
   }
   update(dt, t, S) {
     const g = this.group;
     g.visible = S.shipState !== 'none';
     if (!g.visible) return;
-    const pr = S.shipState === 'passed' ? Math.min(1.4, S.shipProgress + (t - (this.passT ??= t)) / 150) : S.shipProgress;
+    const pr = S.shipState === 'passed' ? Math.min(1.4, S.shipProgress + (t - (this.passT ??= t)) / NIGHT.ship.passage) : S.shipProgress;
     const p = this.p0.clone().lerp(this.p1, pr);
     const h = waveHeight(p.x, p.z, this.ctx.time);
     g.position.set(p.x, h * 0.4 - 0.5, p.z);

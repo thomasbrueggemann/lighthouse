@@ -55,12 +55,7 @@ export function buildKitchen(X) {
     }
     for (let k = 0; k < 4; k++) { B.cyl(0.04, 0.035, 0.09, M.ceramic, -0.4 + k * 0.12, 0.93, 0.05, 10); B.add(new THREE.TorusGeometry(0.025, 0.006, 4, 10), M.ceramic, -0.4 + k * 0.12 + 0.045, 0.93, 0.05); }
   }, { name: 'dresser' });
-  {
-    const p = toWorld(66, dr.r, y + 0.89, 0.3, 0, 0.1);
-    const o = group(p.x, p.y, p.z, faceIn(A(66)) + 0.3);
-    const b = new X.Builder(); b.box(0.1, 0.03, 0.06, M.paintGreen, 0, 0.015, 0); b.box(0.102, 0.02, 0.062, M.paper, 0, 0.012, 0); b.build(o);
-    interact(o, { prompt: () => game.has('matches') ? null : 'Take the box of matches', action: () => { game.give('matches'); o.visible = false; } });
-  }
+  if (X.NIGHT.matches === 'dresser') { const p = toWorld(66, dr.r, y + 0.89, 0.3, 0, 0.1); X.pickup('matches', p.x, p.y, p.z, faceIn(A(66)) + 0.3, 'Take the box of matches'); }
   F.wallLamp(ctx, B, 79, y + 1.95, 4.5);
 
   // ---- the wall clock
@@ -95,6 +90,7 @@ export function buildKitchen(X) {
     B.cyl(0.09, 0.09, 1.7, M.ironBlack, -0.25, 1.75, -0.18, 12); B.cyl(0.09, 0.09, 0.4, M.ironBlack, -0.25, 2.55, -0.36, 12, Math.PI / 2);
     B.cbox(1.3, 0.05, 0.26, M.woodDark, 0.05, 1.5, -0.18, 0, 0, 0, 0.8, null, 0.006);
   }, { name: 'range' });
+  if (X.NIGHT.matches === 'range') { const p = toWorld(stoveA, stove.r, y + 1.525, 0.42, 0, -0.16); X.pickup('matches', p.x, p.y, p.z, faceIn(A(stoveA)) - 0.2, 'Take the box of matches'); }
   r.at(stoveA, W, 1.95, () => { F.pegRail(B, M, 1.1, 5); for (const [x, rr] of [[-0.4, 0.13], [-0.15, 0.1], [0.1, 0.12], [0.35, 0.09]]) { B.push(x, 0, 0.0); F.copperPan(B, M, rr); B.pop(); } });
   { const [x, , z] = atWall(stoveA, 2.9, 0); r.round(x, z, 0.2, 0.45, () => F.coalScuttle(B, M), { name: 'scuttle' }); }
   const fbPos = toWorld(stoveA, stove.r, y, -0.22, 0.5, 0.315);
@@ -109,7 +105,7 @@ export function buildKitchen(X) {
     prompt: () => S.stoveLit ? null : game.has('matches') ? 'Light the stove' : 'The stove is cold. You need matches.',
     hold: 1.4,
     action: () => {
-      if (!game.has('matches')) { game.toast('You\'ll need <b>matches</b>. Try the kitchen dresser.'); return; }
+      if (!game.has('matches')) { game.toast(`You\'ll need <b>matches</b>. The keeper kept a box ${X.placeOf('matches')}.`); return; }
       S.stoveLit = true; fbDoor.visible = true; grill.visible = false; grillBars.visible = true; audio.match(); setTimeout(() => audio.whoosh(), 300);
       game.toast('Kindling catches, then the coal. Warmth spreads through the little kitchen.'); game.refresh();
       audio.addLoop('stove', fbPos.x, fbPos.y, fbPos.z, 0.05, 0.5, (pan) => { audio.burst({ type: 'bandpass', f: 1500 + Math.random() * 3000, q: 2, a: 0.001, d: 0.02 + Math.random() * 0.04, g: 0.15 + Math.random() * 0.25, dest: pan }); if (Math.random() < 0.08) audio.burst({ buf: audio.brown, type: 'lowpass', f: 300, a: 0.2, d: 0.8, g: 0.3, dest: pan }); });

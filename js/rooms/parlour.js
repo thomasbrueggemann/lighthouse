@@ -15,11 +15,13 @@ export function buildParlour(X) {
   r.wall(fa, 1.7, 0.5, 2.7, () => {
     F.fireplace(B, M, M.plasterFloor[2], 1.7, 0.5, 2.7);
     B.push(0.0, 1.82, 0.17); F.mirror(B, M, 0.62, 0.84); B.pop();
-    B.push(0.05, 1.18, 0.05); F.shipModel(B, M); B.pop();
-    B.cbox(0.2, 0.26, 0.1, M.woodDark, -0.42, 1.31, 0.0, 0, 0, 0, 0.5, null, 0.01);        // a little clock
-    B.add(new THREE.CircleGeometry(0.08, 18), M.clockFace, -0.42, 1.33, 0.052);
+    // the mantel shelf's free strip runs in front of the chimney breast (z 0.15..0.33)
+    B.push(0.05, 1.18, 0.24); F.shipModel(B, M); B.pop();
+    B.cbox(0.2, 0.26, 0.1, M.woodDark, -0.42, 1.31, 0.24, 0, 0, 0, 0.5, null, 0.01);        // a little clock
+    B.add(new THREE.CircleGeometry(0.08, 18), M.clockFace, -0.42, 1.33, 0.292);
   }, { name: 'fireplace' });
-  for (const sx of [-0.68, 0.68]) { const p = toWorld(fa, fr, y + 1.18, sx, 0, 0.0); F.candle(ctx, B, p.x, p.y, p.z, 2.2); }
+  for (const sx of [-0.68, 0.68]) { const p = toWorld(fa, fr, y + 1.18, sx, 0, 0.24); F.candle(ctx, B, p.x, p.y, p.z, 2.2); }
+  if (X.NIGHT.matches === 'mantel') { const p = toWorld(fa, fr, y + 1.175, 0.42, 0, 0.25); X.pickup('matches', p.x, p.y, p.z, faceIn(A(fa)) + 0.25, 'Take the box of matches from the mantelpiece'); }
   {
     // the fire itself: logs are in the prop; flames and embers glow, a lamp throws firelight, and it crackles
     const fire = F.fireFlames(0.62, 0.6);

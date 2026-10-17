@@ -31,7 +31,8 @@ export function buildWorkshop(X) {
   r.wall(142, 1.1, 0.4, 2.0, () => F.shelving(B, M, 1.1, 0.4, 2.0, rnd, 'workshop', 6), { name: 'shelves' });
   r.wall(158, 0.9, 0.5, 1.4, () => F.lensStand(B, M), { name: 'spare lens', nocheck: false });
   r.wall(176, 1.0, 0.4, 2.0, () => F.shelving(B, M, 1.0, 0.4, 2.0, rnd, 'workshop', 6), { name: 'shelves' });
-  r.wall(197, 0.95, 0.5, 0.95, () => F.chestOfDrawers(B, M, 0.95, 0.5, 0.95, M.woodDark), { name: 'parts drawers' });
+  const pd = r.wall(197, 0.95, 0.5, 0.95, () => F.chestOfDrawers(B, M, 0.95, 0.5, 0.95, M.woodDark), { name: 'parts drawers' });
+  if (X.NIGHT.belt === 'workshop') { const p = toWorld(197, pd.r, y + 0.95, 0.1, 0, 0.02); X.pickup('belt', p.x, p.y, p.z, 0, 'Take the spare drive belt', () => X.game.toast('A coiled <b>leather drive belt</b>, stamped <em>FOG SIGNAL — SPARE</em>.')); }
   r.sill(1, () => { F.plant(B, M, 0.22, false); }, -0.2);
   r.wall(214, 1.0, 0.45, 1.9, () => F.cupboard(B, M, 1.0, 0.45, 1.9, M.paintBlue), { name: 'oil cupboard' });
   // ---- the big table in the middle where a lens panel is being polished
@@ -44,6 +45,7 @@ export function buildWorkshop(X) {
     B.add(new THREE.CylinderGeometry(0.05, 0.05, 0.1, 10), M.tin, 0.4, 0.95, 0.15);
     for (let k = 0; k < 3; k++) B.cbox(0.2, 0.025, 0.14, X.fab(M, k % 2 ? 0xe8e0c8 : 0xc8b890), 0.45, 0.92 + k * 0.025, -0.1, 0, k * 0.4, 0, 0.5);
   }, { name: 'polishing table' });
+  if (X.NIGHT.rag === 'workshop') { const c = Math.cos(0.3), s = Math.sin(0.3), lx = 0.62, lz = 0.27; X.pickup('rag', tx + lx * c + lz * s, y + 0.9, tz - lx * s + lz * c, 0.8, 'Take a cleaning rag'); }
   for (const [dx, dz] of [[0.6, 0.85], [-0.7, -0.85]]) r.round(tx + dx, tz + dz, 0.18, 0.5, () => F.stool(B, M, 0.5), { name: 'stool', nocheck: true });
   F.hangingLamp(ctx, B, tx, y + 2.44, tz, 0.5, 5.0);
   { const [x, , z] = atWall(186, 3.55, 0); r.round(x, z, 0.34, 1.0, () => F.barrel(B, M), { name: 'oil barrel', nocheck: true }); }

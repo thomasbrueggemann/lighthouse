@@ -39,7 +39,7 @@ export function buildStore(X) {
     b.box(0.45, 0.16, 0.22, M.ironRed, 0, 0.08, 0); b.box(0.02, 0.1, 0.02, M.ironBlack, -0.15, 0.2, 0); b.box(0.02, 0.1, 0.02, M.ironBlack, 0.15, 0.2, 0); b.box(0.32, 0.02, 0.02, M.ironBlack, 0, 0.25, 0);
     const hm = new X.Builder(); hm.box(0.03, 0.03, 0.28, M.wood, 0.05, 0.18, 0.02, 0, 0.3, 0); hm.box(0.05, 0.05, 0.12, M.steel, 0.05 + Math.sin(0.3) * 0.14, 0.18, 0.02 + Math.cos(0.3) * 0.14, 0, 0.3 + Math.PI / 2, 0);
     b.build(o); const hammerGrp = new THREE.Group(); hm.build(hammerGrp); o.add(hammerGrp);
-    interact(o, { prompt: () => game.has('hammer') || S.windowBoarded ? null : 'Take hammer & nails', action: () => { game.give('hammer'); hammerGrp.visible = false; } });
+    interact(o, { prompt: () => game.has('hammer') || S.windowBoarded || !X.NIGHT.broken ? null : 'Take hammer & nails', action: () => { game.give('hammer'); hammerGrp.visible = false; } });
   }
 
   // ---- barrels of paraffin and water, a row of three along the wall below the window
@@ -89,13 +89,20 @@ export function buildStore(X) {
     const b = new X.Builder(); F.crate(b, M, 0.58); b.box(0.6, 0.04, 0.6, M.woodRed, 0, 0.6, 0, 0, 0, 0.12); b.build(o);
     col.addBox(x, z, 0.62, 0.62, ry, y, y + 0.7);
     let searched = false;
-    interact(o, { prompt: () => searched ? null : 'Search the crate', hold: 1.0, onHold: () => { if (Math.random() < 0.1) audio.wipe(); }, action: () => { searched = true; game.give('belt'); game.toast('Under a nest of straw: a coiled <b>leather drive belt</b>, stamped <em>FOG SIGNAL — SPARE</em>.'); } });
+    interact(o, {
+      prompt: () => searched ? null : 'Search the crate', hold: 1.0, onHold: () => { if (Math.random() < 0.1) audio.wipe(); },
+      action: () => {
+        searched = true;
+        if (X.NIGHT.belt === 'crate') { game.give('belt'); game.toast('Under a nest of straw: a coiled <b>leather drive belt</b>, stamped <em>FOG SIGNAL — SPARE</em>.'); }
+        else game.toast('Straw, a mouse\'s nest and a broken lamp chimney. Nothing useful.');
+      },
+    });
   }
   {
     const [x, , z, ry] = atWall(262, 3.8, y);
     const o = group(x, y, z, ry);
     const b = new X.Builder(); for (let k = 0; k < 3; k++) b.box(0.22, 1.7, 0.03, M.wood, -0.25 + k * 0.24, 0.84, 0.12 + k * 0.02, -0.12, 0, 0, 0.8); b.build(o);
-    interact(o, { prompt: () => game.has('boards') || S.windowBoarded ? null : 'Take spare boards', action: () => { game.give('boards'); o.visible = false; } });
+    interact(o, { prompt: () => game.has('boards') || S.windowBoarded || !X.NIGHT.broken ? null : 'Take spare boards', action: () => { game.give('boards'); o.visible = false; } });
   }
 
   // ---- the rug that hides the trapdoor

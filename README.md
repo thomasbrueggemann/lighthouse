@@ -60,7 +60,16 @@ Nine low-ceilinged storeys (3 m floor to floor, exposed beams, plastered ceiling
 
 Outside there is the oil store with the fog-signal compressor, carved steps down to a landing shelf and jetty (watch out for the waves), a moored rowing boat, and sea stacks off the coast.
 
-The watch is a chain of thirteen tasks, from lighting the stove to writing up the journal. Eight relics of the 1887 keeper Elias Marrow are hidden around the rock: behind loose stones, under floorboards, behind a bookcase, and somewhere beneath the tower. Finding them is optional.
+The watch is a chain of tasks, from lighting the stove to writing up the journal, and **no two nights are the same**. Each game draws a night that decides:
+
+- which repairs the gale has left: a casement torn loose (in the bedroom, the assistant's room, the parlour, the library or the workshop), a snapped fog-signal belt, a rowing boat working loose at the jetty (always at least two of the three);
+- where the matches, the cleaning rag and the spare belt were put away;
+- which four to six panes of the lantern glass are salted over;
+- which steamer calls on the wireless, what her trouble is, which way she comes and how long she takes to pass;
+- one or two mishaps while she is passing: a squall that salts the glass again, a leaking pump that bleeds the lamp's pressure away, or the fog signal stalling;
+- the wind and the barometer for the journal.
+
+The menu shows the night's number. Add `?night=N` to the URL to replay a night, or follow *a different night* for a new one. Eight relics of the 1887 keeper Elias Marrow are hidden around the rock: behind loose stones, under floorboards, behind a bookcase, and somewhere beneath the tower. Finding them is optional.
 
 ## Code layout
 
@@ -68,6 +77,7 @@ The watch is a chain of thirteen tasks, from lighting the stove to writing up th
 index.html        page, HUD, menus, import map (three@0.160.0 from jsDelivr)
 css/style.css
 js/main.js        renderer, lighting, main loop, debug hooks
+js/night.js       the seed for the night: tonight's repairs, where things are kept, the ship, the mishaps
 js/post.js        post-processing: HDR MSAA target, depth-based AO, dual-filter bloom, tone map & grade
 js/config.js      tower dimensions, floors, the spiral stair, windows
 js/sky.js         the storm sky (clouds lit by the moon) and the sunrise that follows it, shared by the dome and the sea's reflections
@@ -77,7 +87,7 @@ js/materials.js   materials, triplanar wet-rock shader, reflection env map
 js/island.js      rock heightfield (chunked), cliffs, sea stacks, steps, jetty, oil store, boat
 js/tower.js       walls with real window openings, floors and ceilings, the stair, lantern, lens & beams, cellar, cave
 js/furniture.js   the prop library (chamfered furniture, fabrics, lamps, fire) and the stair-zone logic
-js/rooms/         one module per storey (store, kitchen, parlour, bedroom, guest, study, library, workshop, watch)
+js/rooms/         one module per storey (store, kitchen, parlour, bedroom, guest, study, library, workshop, watch), plus broken.js for tonight's broken window
 js/interior.js    puts the rooms together, plus the cellar, cave, lantern room, oil store
 js/ocean.js       Gerstner-wave ocean (GPU + matching CPU heights), surf foam, beam glints
 js/weather.js     storm sky, rain, lightning & thunder, wave spray; once the log is written the storm clears and the lightning light becomes the sun
@@ -99,3 +109,4 @@ Open the console on the running game and use `skerry`:
 - `skerry.weather.calm = 1` (0 to 1) jumps to the clearing storm and sunrise that follows the final log entry; `skerry.onLogWritten()` plays the real ninety-second transition.
 - `skerry.look` holds the interior brightness (`ambientIn`, `exposureIn`, `lampGain`); `skerry.layoutIssues` lists any furniture the placement helpers found on the stairs.
 - Add `?bare` to the URL to leave the rooms unfurnished.
+- `skerry.night` shows what the current night holds; `?night=N` loads a particular one.

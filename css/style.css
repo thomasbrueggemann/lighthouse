@@ -25,6 +25,8 @@ button { font-family: inherit; }
 .menu-inner { max-width: 660px; text-align: center; }
 .menu-inner .sub { font-style: italic; color: var(--accent); font-size: 22px; margin-top: -4px; }
 .intro { margin: 26px auto; line-height: 1.6; font-size: 19px; color: #d9cfb6; max-width: 560px; }
+.night { margin: -10px auto 22px; color: #9a8e74; font-size: 15px; font-style: italic; }
+.night a { color: var(--accent); }
 #begin, #continue { font-size: 22px; padding: 12px 34px; background: rgba(233, 182, 92, 0.12); color: var(--ink); border: 1px solid var(--accent); cursor: pointer; letter-spacing: 0.05em; transition: background 0.2s, box-shadow 0.2s; }
 #begin:hover, #continue:hover { background: rgba(233, 182, 92, 0.28); box-shadow: 0 0 24px rgba(233, 182, 92, 0.35); }
 .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 26px; margin: 30px auto 18px; max-width: 480px; text-align: left; color: var(--dim); font-size: 15px; }

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { NIGHT } from './night.js';
 
 export const TAU = Math.PI * 2;
 export const DEG = Math.PI / 180;
@@ -47,14 +48,14 @@ export const WINDOWS = FLOORS.map((f, k) => {
   if (k === N_FLOORS - 1) return [0, 90, 180, 270].map(a => win(a + 45, { yb: 1.0, yt: 2.15 }));
   const list = [win(s + 128), win(s + 205)];
   if (k % 2 === 1) list.push(win(s - 78));          // some floors also get a window where the previous flight arrives
-  if (f.id === 'bedroom') list[0].broken = true;     // the casement that has torn loose in the gale
+  if (NIGHT.broken && f.id === NIGHT.broken.floor) list[NIGHT.broken.index].broken = true;     // tonight's casement that has torn loose in the gale
   return list;
 });
 
 export const DOOR_ANGLE = 90; // deg, +z (south)
 export const SECRET_NICHE = { floor: 5, a: 247.5, n: 4 };
 export const LANTERN_DOOR_SIDE = 13; // of 16 sides
-export const DIRTY_PANES = [0, 2, 4, 6, 9, 11];
+export const DIRTY_PANES = NIGHT.dirtyPanes; // the lantern sides salted over tonight
 
 export const SHED = { x: -10.8, z: 1.5, w: 5.0, d: 6.4, h: 2.7 }; // w along x, d along z
 export const CAVE = { x: 0, y: 1.8, z: -13.6, r: 4.3, h: 3.3 };

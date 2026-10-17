@@ -16,6 +16,7 @@ import { rainWet } from './materials.js';
 import { Player } from './player.js';
 import { Interaction } from './interact.js';
 import { Game, Ship, TREASURES } from './game.js';
+import { NIGHT, nightURL } from './night.js';
 import { AudioEngine } from './audio.js';
 import { UI } from './ui.js';
 import { LENS_Y, R_GLASS, LANTERN_Y, FLOORS, smoothstep } from './config.js';
@@ -160,10 +161,15 @@ async function main() {
   $('journal').addEventListener('click', () => { ui.toggleJournal(false); lock(); });
 
   const qsel = $('quality'); qsel.value = qualityName;
-  qsel.addEventListener('change', () => { store.set('quality', qsel.value); location.reload(); });
+  qsel.addEventListener('change', () => { store.set('quality', qsel.value); location.replace(nightURL()); });   // same night, new quality
   const sens = $('sens'); sens.value = settings.sens;
   sens.addEventListener('input', () => { settings.sens = +sens.value; store.set('sens', settings.sens); });
 
+  // every watch is a different night: say what this one holds, and offer another
+  const troubles = ['an unlit lamp', NIGHT.broken && 'a broken window', NIGHT.repairs.belt && 'a fog signal with a snapped belt', NIGHT.repairs.boat && 'a boat working loose at the jetty', 'a cold stove'].filter(Boolean);
+  $('troubles').textContent = troubles.join(', ');
+  const other = new URL(location.href); other.searchParams.delete('night');
+  $('night').innerHTML = `Night no. ${NIGHT.no} &nbsp;·&nbsp; <a href="${other.href}">a different night</a>`;
   ui.setTreasures(0, Object.keys(TREASURES).length);
   ui.setJournal(game.treasures);
   game.refresh();
@@ -187,7 +193,7 @@ async function main() {
     ui.onCloseNote = () => {
       ui.onCloseNote = prev;
       const n = game.treasures.size;
-      $('endStats').innerHTML = `The Aurora is safe. The light burned all night.<br>Time on watch: <b>${Math.floor(game.time / 60)} min</b> &nbsp;·&nbsp; Relics of Elias Marrow: <b>${n} / ${Object.keys(TREASURES).length}</b>${n < 8 ? '<br><small>The tower still keeps some of its secrets…</small>' : '<br><small>You have uncovered every one of Marrow\'s secrets.</small>'}`;
+      $('endStats').innerHTML = `The ${NIGHT.ship.short} is safe. The light burned all night.<br>Night no. <b>${NIGHT.no}</b> &nbsp;·&nbsp; Time on watch: <b>${Math.floor(game.time / 60)} min</b> &nbsp;·&nbsp; Relics of Elias Marrow: <b>${n} / ${Object.keys(TREASURES).length}</b>${n < 8 ? '<br><small>The tower still keeps some of its secrets…</small>' : '<br><small>You have uncovered every one of Marrow\'s secrets.</small>'}`;
       $('ending').classList.remove('hidden');
     };
   };
@@ -299,7 +305,8 @@ async function main() {
   ctx.checkWalk = () => import('./walkcheck.js').then(m => m.run(ctx));
   ctx.checkClimb = () => import('./walkcheck.js').then(m => m.climb(ctx));
   // debug: light the lamp and wind the clockwork so the beam can be inspected without playing the tasks
-  ctx.lamp = () => { Object.assign(game.S, { lampLit: true, fuel: 1, clockwork: 1, glassCleaned: 6, fuelFilled: true, pressure: 1 }); };
+  ctx.lamp = () => { Object.assign(game.S, { lampLit: true, fuel: 1, clockwork: 1, glassCleaned: game.S.glassTotal, fuelFilled: true, pressure: 1 }); };
+  ctx.night = NIGHT;
 }
 
 const tick = () => new Promise((r) => setTimeout(r, 0));

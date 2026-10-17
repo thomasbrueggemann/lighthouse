@@ -5,6 +5,8 @@ import { DEG, TAU, FLOORS, R_IN, CELLAR_Y, LANTERN_Y, LENS_Y, R_GLASS, SHED, CAV
 import { terrainHeight, JETTY } from './island.js';
 import { HATCH } from './tower.js';
 import { ORDERS } from './game.js';
+import { NIGHT, placeOf } from './night.js';
+import { buildBrokenWindow } from './rooms/broken.js';
 import { addLamp } from './lights.js';
 import { makeEnv } from './rooms/env.js';
 import * as F from './furniture.js';
@@ -36,10 +38,23 @@ export function buildInterior(ctx) {
   const atWall = (aDeg, r, y, rot = 0) => { const a = A(aDeg); return [r * Math.cos(a), y, r * Math.sin(a), faceIn(a) + rot]; };
   const pushWall = (aDeg, r, y, rot = 0) => { const [x, yy, z, ry] = atWall(aDeg, r, y, rot); B.push(x, yy, z, ry); };
   const colWall = (aDeg, r, w, d, y0, y1, rot = 0) => { const [x, , z, ry] = atWall(aDeg, r, 0, rot); return col.addBox(x, z, w, d, ry, y0, y1); };
+  // the things the keeper needs are put away somewhere different each night: a room module calls pickup() only at the
+  // spot NIGHT chose for that item
+  const ITEM_LOOKS = {
+    matches: (b) => { b.box(0.1, 0.03, 0.06, M.paintGreen, 0, 0.015, 0); b.box(0.102, 0.02, 0.062, M.paper, 0, 0.012, 0); },
+    rag: (b) => b.add(new THREE.SphereGeometry(0.1, 8, 6).scale(1.3, 0.3, 1), F.fab(M, 0xd8d0b0), 0, 0.03, 0),
+    belt: (b) => { for (let i = 0; i < 2; i++) b.add(new THREE.TorusGeometry(0.15 - i * 0.025, 0.016, 6, 24), M.leather, 0, 0.017 + i * 0.03, 0, Math.PI / 2); },
+  };
+  const pickup = (item, x, y, z, ry, prompt, onTake) => {
+    const o = group(x, y, z, ry);
+    const b = new Builder(); ITEM_LOOKS[item](b); b.build(o);
+    interact(o, { assist: true, prompt: () => game.has(item) ? null : prompt, action: () => { game.give(item); o.visible = false; onTake && onTake(); } });
+    return o;
+  };
 
   // everything a room module needs: the shared builder, the placement helpers, and the game hooks
   const env = makeEnv(ctx, B, g);
-  const X = { ctx, B, g, env, rnd, S, T, M, col, game, audio, interact, group, atWall, pushWall, colWall, toWorld, A, faceTo, ORDERS, Builder, addLamp, fab: F.fab, logEntry };
+  const X = { ctx, B, g, env, rnd, S, T, M, col, game, audio, interact, group, atWall, pushWall, colWall, toWorld, A, faceTo, ORDERS, Builder, addLamp, fab: F.fab, logEntry, pickup, NIGHT, placeOf };
 
   // ================================================================ THE TOWER'S ROOMS (see rooms/)
   buildStore(X);
@@ -51,6 +66,7 @@ export function buildInterior(ctx) {
   buildLibrary(X);
   buildWorkshop(X);
   buildWatch(X);
+  buildBrokenWindow(X);
 
   // ================================================================ CELLAR
   {
@@ -188,9 +204,9 @@ export function buildInterior(ctx) {
         },
         hold: 2.5, onHold: (dt) => { if (game.has('rag') && Math.hypot(ctx.player.pos.x, ctx.player.pos.z) > R_GLASS) { pane.dirt = Math.max(0.05, pane.dirt - dt / 2.5); pane.mat.opacity = pane.dirt * 0.95; if (Math.random() < 0.2) audio.wipe(); } },
         action: () => {
-          if (!game.has('rag') || Math.hypot(ctx.player.pos.x, ctx.player.pos.z) < R_GLASS) { pane.mat.opacity = pane.dirt * 0.95; if (!game.has('rag')) game.toast('There\'s a <b>cleaning rag</b> on the bench in the watch room.'); return; }
+          if (!game.has('rag') || Math.hypot(ctx.player.pos.x, ctx.player.pos.z) < R_GLASS) { pane.mat.opacity = pane.dirt * 0.95; if (!game.has('rag')) game.toast(`There\'s a <b>cleaning rag</b> ${placeOf('rag')}.`); return; }
           pane.dirt = 0; pane.mesh.visible = false; S.glassCleaned++; game.refresh();
-          if (S.glassCleaned >= 6) game.toast('The last pane gleams. The beam blazes out across the sea.');
+          if (S.glassCleaned >= S.glassTotal) game.toast('The last pane gleams. The beam blazes out across the sea.');
         },
       });
       ctx.onUpdate(() => { pane.mesh.userData.inter.hold = game.has('rag') && Math.hypot(ctx.player.pos.x, ctx.player.pos.z) > R_GLASS ? 2.5 : 0; });
@@ -210,12 +226,13 @@ export function buildInterior(ctx) {
       });
       const tb = onSide(3, 0.7, 0.5, 0.78, () => { F.table(B, M, 0.7, 0.5, 0.75, M.wood); B.push(-0.12, 0.75, 0); F.teapot(B, M, M.ceramicBlue); B.pop(); B.push(0.16, 0.75, 0.05); F.cup(B, M); B.pop(); });
       { const sx = Math.cos((3.5 / 16) * TAU) * 2.0, sz = Math.sin((3.5 / 16) * TAU) * 2.0; B.push(sx, LANTERN_Y, sz, faceTo(sx, sz, tb.x, tb.z)); F.stool(B, M, 0.47); B.pop(); col.addCircle(sx, sz, 0.2, LANTERN_Y, LANTERN_Y + 0.5); }
-      onSide(15, 0.9, 0.36, 0.95, () => {
+      const shelf = onSide(15, 0.9, 0.36, 0.95, () => {
         B.cbox(0.9, 0.04, 0.36, M.woodDark, 0, 0.5, 0, 0, 0, 0, 0.8, null, 0.006); B.cbox(0.9, 0.04, 0.36, M.woodDark, 0, 0.95, 0, 0, 0, 0, 0.8, null, 0.006);
         for (const sx of [-1, 1]) B.cbox(0.04, 0.95, 0.36, M.woodDark, sx * 0.43, 0.475, 0, 0, 0, 0, 0.8, null, 0.006);
         for (let k = 0; k < 3; k++) { B.cyl(0.05, 0.05, 0.04, M.tin, -0.3 + k * 0.14, 0.54, 0.0, 12); B.cyl(0.052, 0.052, 0.01, M.tin, -0.3 + k * 0.14, 0.565, 0.0, 12); }
         B.cbox(0.22, 0.06, 0.16, F.fab(M, 0xe8e0c8), 0.2, 0.98, 0.0, 0, 0.3, 0, 0.5, null, 0.01); B.cbox(0.2, 0.05, 0.14, F.fab(M, 0xc8b890), 0.25, 1.035, 0.0, 0, -0.2, 0, 0.5, null, 0.01);
       });
+      if (NIGHT.rag === 'lantern') { const c = Math.cos(shelf.ry), s = Math.sin(shelf.ry), lx = -0.2; pickup('rag', shelf.x + lx * c, LANTERN_Y + 0.94, shelf.z - lx * s, shelf.ry + 0.4, 'Take a cleaning rag'); }
       const bx = apo * 0.8 * Math.cos((12.2 / 16) * TAU), bz = apo * 0.8 * Math.sin((12.2 / 16) * TAU);
       B.push(bx, LANTERN_Y, bz); B.add(lathe([[0.001, 0], [0.14, 0], [0.17, 0.28], [0.162, 0.28], [0.13, 0.02], [0.001, 0.015]], 14), M.tin); B.pop(); col.addCircle(bx, bz, 0.17, LANTERN_Y, LANTERN_Y + 0.3);
     }
@@ -228,6 +245,13 @@ export function buildInterior(ctx) {
     }
   }
 
+
+  // a squall can salt clean panes over again (one of the night's incidents); returns how many it fouled
+  ctx.resaltPanes = (n) => {
+    const clean = T.panes.filter(p => p.dirt <= 0.02).sort(() => Math.random() - 0.5).slice(0, n);
+    for (const p of clean) { p.dirt = 1; p.mesh.visible = true; p.mat.opacity = 0.95; S.glassCleaned--; }
+    return clean.length;
+  };
 
   // ================================================================ OIL STORE & FOG SIGNAL
   {
@@ -257,7 +281,7 @@ export function buildInterior(ctx) {
     { const fb = new Builder(); fb.cyl(0.3, 0.3, 0.06, M.ironBlack, 0, 0, 0, 24, Math.PI / 2); for (let k = 0; k < 4; k++) fb.box(0.04, 0.55, 0.03, M.ironBlack, 0, 0, 0.0, 0, 0, k * Math.PI / 4); fb.cyl(0.06, 0.06, 0.12, M.steel, 0, 0, 0, 10, Math.PI / 2); fb.build(fly); }
     const pulley = new THREE.Group(); pulley.position.set(ex - 0.15, y + 0.75, ez + 0.3); g.add(pulley);
     { const pb = new Builder(); pb.cyl(0.1, 0.1, 0.06, M.steel, 0, 0, 0, 16, Math.PI / 2); pb.build(pulley); }
-    const belt = new THREE.Mesh(new THREE.TorusGeometry(0.33, 0.015, 4, 30), M.leather); belt.scale.set(1, 0.55, 1); belt.position.set(ex + 0.15, y + 0.65, ez + 0.33); belt.rotation.z = 0.35; belt.visible = false; g.add(belt);
+    const belt = new THREE.Mesh(new THREE.TorusGeometry(0.33, 0.015, 4, 30), M.leather); belt.scale.set(1, 0.55, 1); belt.position.set(ex + 0.15, y + 0.65, ez + 0.33); belt.rotation.z = 0.35; belt.visible = S.beltFitted; g.add(belt);
     const crankP = new THREE.Group(); crankP.position.set(ex + 0.45, y + 0.55, ez + 0.36); g.add(crankP);
     { const cb = new Builder(); cb.box(0.04, 0.3, 0.03, M.ironBlack, 0, -0.15, 0); cb.cyl(0.025, 0.025, 0.15, M.woodDark, 0, -0.3, 0.07, 8, Math.PI / 2); cb.build(crankP); }
     const hornP = new THREE.Vector3(sx - w / 2 - 1.5, 10.5, sz);
@@ -273,15 +297,16 @@ export function buildInterior(ctx) {
       prompt: () => {
         if (S.foghornOn) return null;
         if (!S.beltFitted) return game.has('belt') ? 'Fit the drive belt to the compressor' : 'The fog signal compressor. Its drive belt has snapped.';
+        if (S.foghornStalled) return 'Crank the stalled engine back into life';
         return 'Crank the engine to start the fog signal';
       },
       hold: 0, onHold: (dt) => { crankP.rotation.z -= dt * 10; if (Math.random() < 0.2) audio.ratchet(); },
       action: () => {
         if (!S.beltFitted) {
-          if (!game.has('belt')) { game.toast('The old belt lies in two pieces. There should be a <b>spare</b> in the tower store room.'); return; }
+          if (!game.has('belt')) { game.toast(`The old belt lies in two pieces. The stores book lists a <b>spare</b> ${placeOf('belt')}.`); return; }
           S.beltFitted = true; belt.visible = true; game.take('belt'); audio.thud(); game.toast('You stretch the new belt over the pulleys. Now crank her over.'); return;
         }
-        S.foghornOn = true; game.refresh(); audio.thud(); blastT = 1.5;
+        S.foghornOn = true; S.foghornStalled = false; game.refresh(); audio.thud(); blastT = 1.5;
         game.toast('The engine coughs, catches and thumps into life. The great horn bellows out over the water.', 5);
         audio.addLoop('engine', ex, y + 0.6, ez, 0.12, 0.14, (pan) => audio.burst({ buf: audio.brown, type: 'lowpass', f: 220, a: 0.005, d: 0.09, g: 0.5, dest: pan }), 2);
       },
@@ -297,6 +322,7 @@ export function buildInterior(ctx) {
       interact(o, { prompt: () => game.has('crowbar') ? null : 'Take the crowbar', action: () => { game.give('crowbar'); o.visible = false; } });
     }
     B.box(0.3, 0.2, 0.25, M.tin, x0 + 0.3, y + 0.95, sz - 0.6);
+    if (NIGHT.belt === 'shed') pickup('belt', x0 + 0.3, y + 0.85, sz + 0.3, 0, 'Take the spare drive belt', () => game.toast('A coiled <b>leather drive belt</b>, stamped <em>FOG SIGNAL — SPARE</em>.'));
     for (let i = 0; i < 6; i++) B.add(new THREE.TorusGeometry(0.25 - i * 0.012, 0.025, 6, 18), M.rope, x1 - 0.4, y + 0.03 + i * 0.045, z1 - 0.4, Math.PI / 2);
     // hanging lamp
     B.cyl(0.006, 0.006, 0.5, M.ironBlack, sx + 0.3, y + 2.5, sz, 4);
@@ -309,6 +335,30 @@ export function buildInterior(ctx) {
     const boat = ctx.boat;
     const tin = new THREE.Mesh(boxGeo(0.16, 0.06, 0.1), M.tin); tin.position.set(0.2, -0.3, -0.6); boat.add(tin);
     interact(tin, { assist: true, range: 3.2, prompt: () => game.treasures.has('pearls') ? null : 'Something glints under the thwart', action: () => { tin.visible = false; game.findTreasure('pearls'); } });
+    // on some nights her painter has worked loose: she sheers about on the swell and slams against the jetty until
+    // she is made fast
+    const yaw0 = boat.rotation.y, x0 = boat.position.x;
+    let swing = 0, swingV = 0, bumpT = 0, _bp = null;
+    const bumpPan = () => (_bp ??= audio.panner(x0, 0.5, boat.position.z, 6, 1.2));
+    const bow = new THREE.Group(); bow.position.set(0, 0.0, 1.2); boat.add(bow);
+    bow.add(new THREE.Mesh(boxGeo(1.3, 0.9, 1.6), new THREE.MeshBasicMaterial({ visible: false })));
+    interact(bow, {
+      range: 4.0,   // she lies well below the jetty planking
+      prompt: () => !NIGHT.repairs.boat || S.boatSecured ? null : 'Haul the boat in and make her painter fast',
+      hold: 2.5, onHold: () => { if (Math.random() < 0.08) audio.creak(0.4); },
+      action: () => { S.boatSecured = true; audio.thud(); game.toast('You haul her in hand over hand and take two round turns on the bollard. She rides quietly now.', 5); game.refresh(); },
+    });
+    ctx.onUpdate((dt, t) => {
+      const loose = NIGHT.repairs.boat && !S.boatSecured;
+      bow.visible = loose;   // once she is fast the bow's hit box must not hide the tin under the thwart
+      const push = loose ? Math.sin(t * 0.7) * 0.9 + ctx.weather.gust * 1.5 : 0;
+      swingV += (push - swing * (loose ? 2.5 : 6)) * dt; swingV *= 1 - dt * (loose ? 0.6 : 3);
+      swing += swingV * dt;
+      boat.rotation.y = yaw0 + swing * 0.35;
+      boat.position.x = x0 + swing * 0.3;
+      bumpT -= dt;
+      if (loose && Math.abs(swingV) > 0.35 && bumpT < 0 && audio.ok) { bumpT = 2.5; audio.burst({ buf: audio.brown, type: 'lowpass', f: 300, a: 0.004, d: 0.3, g: 0.8, dest: bumpPan() }); }
+    });
     ctx.onUpdate((dt, t) => {
       const b = boat.position; const h = ctx.waveH(b.x, b.z);
       const hf = ctx.waveH(b.x, b.z + 1.5), hs = ctx.waveH(b.x + 0.6, b.z);
@@ -326,12 +376,17 @@ export function buildInterior(ctx) {
 }
 
 function logEntry(game) {
-  const S = game.S, n = game.treasures.size;
+  const S = game.S, n = game.treasures.size, W = NIGHT.weather, sh = NIGHT.ship;
+  const repairs = [
+    'Fog signal run through the night' + (NIGHT.repairs.belt ? ', its drive belt replaced' : '') + (game.incidents.some(i => i.kind === 'stall' && i.done) ? ', restarted after stalling' : '') + '.',
+    NIGHT.broken ? (S.windowBoarded ? `Broken casement in the ${NIGHT.broken.room} boarded.` : `Casement in the ${NIGHT.broken.room} blown in; not yet made good.`) : '',
+    NIGHT.repairs.boat ? (S.boatSecured ? 'Boat found adrift on her painter and made fast.' : 'Boat working loose at the jetty.') : '',
+  ].filter(Boolean).join(' ');
   return `<h2>Skerryhead Light — Journal</h2>
 <p><em>In your own hand, beneath your predecessor's last entry:</em></p>
-<p>"Oct. 10th. Wind NW, whole gale, veering. Barometer 28.3 and falling. Heavy sea breaking over the landing. Relief boat unable to land.</p>
-<p>Light exhibited at dusk${S.glassCleaned >= 6 ? ', glass cleaned of salt' : ''}. Fog signal run through the night. Broken casement in the bedroom boarded.</p>
-<p>At the height of the gale the SS <b>Aurora</b> called on the wireless, lost and near the reef. Guided her south by the light and the horn. She is safe in open water.${S.tea ? ' Tea taken at 2 a.m.' : ''}</p>
+<p>"Oct. 10th. Wind ${W.wind}. Barometer ${W.baro} and falling. Heavy sea breaking over the landing. Relief boat unable to land.</p>
+<p>Light exhibited at dusk${S.glassCleaned >= S.glassTotal ? ', glass cleaned of salt' : ''}. ${repairs}</p>
+<p>At the height of the gale the ${sh.name.replace(sh.short, `<b>${sh.short}</b>`)} called on the wireless, lost and near the reef. Guided her south by the light and the horn. She is safe in open water.${S.tea ? ' Tea taken at 2 a.m.' : ''}</p>
 <p>${n >= 8 ? 'I have found all of Elias Marrow\'s secrets now. The Marianne may rest. ' : n > 0 ? `Strange things about this old tower: ${n} relics of the keeper Marrow found so far. ` : ''}All well."</p>
 <p class="sig">— Keeper on watch</p>`;
 }

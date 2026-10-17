@@ -55,7 +55,7 @@ export class UI {
       <div><b>Paraffin</b> ${bar(S.fuel, S.fuel < 0.15)}</div>
       <div><b>Pressure</b> ${bar(S.pressure, false)}</div>
       <div><b>Clockwork</b> ${bar(S.clockwork, S.clockwork < 0.12)}</div>
-      <div><b>Glass</b> ${S.glassCleaned}/6 &nbsp; <b>Fog signal</b> ${S.foghornOn ? '<em class="ok">on</em>' : '<em class="bad">off</em>'}</div>`;
+      <div><b>Glass</b> ${S.glassCleaned}/${S.glassTotal} &nbsp; <b>Fog signal</b> ${S.foghornOn ? '<em class="ok">on</em>' : '<em class="bad">off</em>'}</div>`;
     if (h !== this._sh) { this.el.status.innerHTML = h; this._sh = h; }
   }
   showNote(html) {

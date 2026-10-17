@@ -87,18 +87,13 @@ export function buildWatch(X) {
     interact(lever, {
       prompt: () => !S.fuelFilled ? null : S.pressure > 0.98 ? null : 'Pump up the pressure',
       hold: 3.0, onHold: (dt, pr) => { lever.position.y = p.y + Math.abs(Math.sin(pr * 18)) * -0.15; S.pressure = Math.min(1, S.pressure + dt / 3); if (Math.random() < 0.1) audio.pump(); },
-      action: () => { S.pressure = 1; lever.position.y = p.y; game.refresh(); game.toast('The needle stands in the red. Ready to light the lamp above.'); },
+      action: () => { S.pressure = 1; lever.position.y = p.y; if (S.leak) { S.leak = false; game.toast('You tighten the gland nut on the pump. The hiss stops and the needle holds.', 5); } game.refresh(); game.toast('The needle stands in the red. Ready to light the lamp above.'); },
     });
   }
 
   // ---- the cleaning bench (with the rag) and shelves of lamp oil
   const bench = r.wall(140, 1.2, 0.55, 0.95, () => { F.workTable(B, M, 1.2, 0.55, 0.85, M.woodDark); for (let k = 0; k < 4; k++) B.box(0.1, 0.06, 0.1, X.fab(M, 0xe8e0c8), -0.4 + k * 0.12, 0.88, -0.1); B.cbox(0.25, 0.18, 0.18, M.tin, 0.35, 0.94, -0.05, 0, 0, 0, 0.5, null, 0.01); }, { name: 'cleaning bench' });
-  {
-    const p = toWorld(140, bench.r, y + 0.85, 0.05, 0, 0.12);
-    const o = group(p.x, p.y, p.z, 0.4);
-    o.add(new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 6).scale(1.3, 0.3, 1), X.fab(M, 0xd8d0b0)));
-    interact(o, { prompt: () => game.has('rag') ? null : 'Take the cleaning rag', action: () => { game.give('rag'); o.visible = false; } });
-  }
+  if (X.NIGHT.rag === 'bench') { const p = toWorld(140, bench.r, y + 0.85, 0.05, 0, 0.12); X.pickup('rag', p.x, p.y - 0.03, p.z, 0.4, 'Take the cleaning rag'); }
   r.wall(165, 1.1, 0.4, 2.0, () => F.shelving(B, M, 1.1, 0.4, 2.0, rnd, 'workshop', 6), { name: 'oil shelves' });
   F.wallLamp(ctx, B, 152, y + 1.9, 4.5);
 
